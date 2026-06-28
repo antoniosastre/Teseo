@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Destinos{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Volúmenes de destino</h1>
+  <a href="/destinos/nuevo" class="primary btn">+ Añadir destino</a>
+</div>
+
+<table class="data expandable">
+  <thead>
+    <tr>
+      <th></th><th>Nombre</th><th>Estado</th><th>Total</th><th>Backups</th>
+      <th>Libre</th><th>Protección</th><th>Ubicación</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for d in destinos %}
+    <tr class="row-main" data-target="dest-{{ d.id }}">
+      <td><button class="expander" aria-label="Desplegar">▶</button></td>
+      <td>{{ d.nombre }}<br><small class="muted">{{ d.host }}</small></td>
+      <td><span class="state-dot state-{{ d.estado }}" data-destino="{{ d.id }}"></span> {{ d.estado }}</td>
+      <td>{{ d.espacio_total|human_bytes }}</td>
+      <td>{{ d.espacio_backups|human_bytes }}</td>
+      <td>{{ d.espacio_libre|human_bytes }}</td>
+      <td>{{ d.proteccion }}</td>
+      <td>{{ d.ubicacion }}</td>
+      <td>
+        <button class="link test-btn" data-url="/destinos/{{ d.id }}/test">Probar</button>
+        <form method="post" action="/destinos/{{ d.id }}/eliminar" class="inline"
+              onsubmit="return confirm('¿Eliminar destino {{ d.nombre }}?')">
+          <button class="link danger" {{ 'disabled' if d.n_tareas }}>Eliminar</button>
+        </form>
+      </td>
+    </tr>
+    <tr class="row-detail" id="dest-{{ d.id }}" hidden>
+      <td colspan="9">
+        {% if d.espacio_total %}
+        <div class="usage-bar">
+          {% set pct = (d.espacio_backups / d.espacio_total * 100) if d.espacio_total else 0 %}
+          <div class="usage-fill" style="width: {{ pct }}%"></div>
+        </div>
+        {% endif %}
+        <strong>Orígenes que copian aquí:</strong>
+        {% if d.origenes %}
+          <ul class="chips">{% for o in d.origenes %}<li class="chip">{{ o }}</li>{% endfor %}</ul>
+        {% else %}
+          <span class="muted">Ninguno todavía.</span>
+        {% endif %}
+        <div class="muted small">Carpeta base: <code>{{ d.carpeta_base }}</code></div>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="muted">No hay destinos. Añade el primero.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

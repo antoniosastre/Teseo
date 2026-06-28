@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Teseo{% endblock %} · Teseo</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+{% if request.session.get('admin_id') %}
+<header class="topbar">
+  <div class="brand">🛰️ Teseo</div>
+  <nav>
+    <a href="/" class="{{ 'active' if active=='dashboard' }}">Panel</a>
+    <a href="/origenes" class="{{ 'active' if active=='origenes' }}">Orígenes</a>
+    <a href="/destinos" class="{{ 'active' if active=='destinos' }}">Destinos</a>
+  </nav>
+  <div class="user">
+    <span>{{ request.session.get('admin_user') }}</span>
+    <a href="/logout" class="logout">Salir</a>
+  </div>
+</header>
+{% endif %}
+<main class="container">
+  {% block content %}{% endblock %}
+</main>
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

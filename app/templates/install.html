@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Instalación{% endblock %}
+{% block content %}
+<div class="install-card">
+  <h1>🛰️ Configuración inicial de Teseo</h1>
+  <p class="muted">No se ha encontrado configuración. Completa estos datos para empezar.</p>
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+  {% if test_message %}<div class="alert {{ 'ok' if test_ok else 'error' }}">{{ test_message }}</div>{% endif %}
+
+  <form method="post" action="/install" id="install-form">
+    <fieldset>
+      <legend>1 · Base de datos MySQL</legend>
+      <div class="grid2">
+        <label>Host <input name="db_host" value="{{ form.db_host or 'localhost' }}" required></label>
+        <label>Puerto <input name="db_port" type="number" value="{{ form.db_port or 3306 }}" required></label>
+        <label>Usuario <input name="db_user" value="{{ form.db_user or '' }}" required></label>
+        <label>Contraseña <input name="db_password" type="password" value="{{ form.db_password or '' }}"></label>
+        <label>Nombre de la BD <input name="db_name" value="{{ form.db_name or 'teseo' }}" required></label>
+      </div>
+      <button type="submit" formaction="/install/test" class="secondary">Probar conexión</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>2 · Primer administrador</legend>
+      <div class="grid2">
+        <label>Usuario <input name="admin_user" value="{{ form.admin_user or '' }}" required></label>
+        <label>Email <input name="admin_email" type="email" value="{{ form.admin_email or '' }}"></label>
+        <label>Contraseña <input name="admin_password" type="password" required></label>
+        <label>Repite contraseña <input name="admin_password2" type="password" required></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3 · Email de avisos (SMTP, opcional)</legend>
+      <div class="grid2">
+        <label>Servidor SMTP <input name="smtp_host" value="{{ form.smtp_host or '' }}"></label>
+        <label>Puerto <input name="smtp_port" type="number" value="{{ form.smtp_port or 587 }}"></label>
+        <label>Usuario <input name="smtp_user" value="{{ form.smtp_user or '' }}"></label>
+        <label>Contraseña <input name="smtp_password" type="password"></label>
+        <label>Remitente (From) <input name="smtp_sender" value="{{ form.smtp_sender or '' }}"></label>
+      </div>
+    </fieldset>
+
+    <button type="submit" class="primary">Instalar y crear tablas</button>
+  </form>
+</div>
+{% endblock %}

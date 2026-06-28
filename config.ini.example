@@ -1,0 +1,25 @@
+; Ejemplo de configuración de Teseo.
+; Este fichero lo GENERA el asistente de instalación automáticamente.
+; No es necesario crearlo a mano: si no existe, la app abre la pasarela /install.
+; Ruta por defecto: ./config.ini  (override con la variable de entorno TESEO_CONFIG)
+
+[database]
+host = localhost
+port = 3306
+user = teseo
+password = CAMBIA_ESTO
+name = teseo
+
+[security]
+; Claves generadas con cryptography.fernet.generate_key() durante la instalación.
+secret_key = CLAVE_DE_SESION_WEB
+encryption_key = CLAVE_FERNET_PARA_CIFRAR_SECRETOS
+
+[smtp]
+; Opcional: avisos por email ante fallos / orígenes inaccesibles.
+host = smtp.ejemplo.com
+port = 587
+user = avisos@ejemplo.com
+password = CAMBIA_ESTO
+sender = teseo@ejemplo.com
+use_tls = true

@@ -1,0 +1,13 @@
+# Configuración con secretos (se genera en la instalación)
+config.ini
+
+# Entornos y caché de Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Logs
+*.log
