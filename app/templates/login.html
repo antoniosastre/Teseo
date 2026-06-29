@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Acceso{% endblock %}
+{% block content %}
+<div class="auth-card">
+  <h1>🛰️ Teseo</h1>
+  <p class="muted">Panel de copias de seguridad rsync</p>
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <label>Usuario
+      <input type="text" name="username" autofocus required>
+    </label>
+    <label>Contraseña
+      <input type="password" name="password" required>
+    </label>
+    <button type="submit" class="primary">Entrar</button>
+  </form>
+</div>
+{% endblock %}

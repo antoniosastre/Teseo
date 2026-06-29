@@ -1,0 +1,16 @@
+[Unit]
+Description=Teseo - Daemon de scheduler y ejecución de copias rsync
+After=network.target mysql.service mariadb.service
+
+[Service]
+Type=simple
+User=teseo
+Group=teseo
+WorkingDirectory=/opt/teseo
+Environment=TESEO_CONFIG=/etc/teseo/config.ini
+ExecStart=/opt/teseo/.venv/bin/python -m daemon.teseod
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

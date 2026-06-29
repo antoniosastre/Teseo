@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Nuevo origen{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Añadir origen (tarea de backup)</h1><a href="/origenes" class="btn secondary">Volver</a></div>
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+{% if not hosts %}
+  <div class="alert error">Primero debes <a href="/origenes/host/nuevo">añadir un host origen</a>.</div>
+{% elif not destinos %}
+  <div class="alert error">Primero debes <a href="/destinos/nuevo">añadir un destino</a>.</div>
+{% else %}
+<form method="post" action="/origenes" class="form-card" id="tarea-form">
+  <fieldset>
+    <legend>Origen y destino</legend>
+    <div class="grid2">
+      <label>Host origen
+        <select name="host_id" id="host_id" required>
+          {% for h in hosts %}<option value="{{ h.id }}">{{ h.nombre }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Destino
+        <select name="destino_id" id="destino_id" required>
+          {% for d in destinos %}<option value="{{ d.id }}">{{ d.nombre }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <label>Carpeta a copiar
+      <span class="inline-add">
+        <input name="carpeta_origen" id="carpeta_origen" value="{{ form.carpeta_origen or '' }}" placeholder="/ruta/a/copiar" required>
+        <button type="button" class="secondary" id="browse-btn">Examinar…</button>
+      </span>
+    </label>
+    <div id="browser" class="browser" hidden></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Tipo y programación</legend>
+    <div class="grid2">
+      <label>Tipo de copia
+        <select name="tipo" id="tipo">
+          {% for t in tipos %}
+          <option value="{{ t }}">{{ {'espejo':'Espejo (réplica con --delete)','incremental':'Incremental (snapshots --link-dest)'}[t] }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Programación (cron)
+        <input name="cron" id="cron" value="{{ form.cron or '0 2 * * *' }}" required>
+        <small class="muted">Ej.: <code>0 2 * * *</code> = cada día a las 02:00</small>
+      </label>
+      <label>Retención (nº de snapshots)
+        <input name="retencion" type="number" min="1" value="{{ form.retencion or 7 }}">
+      </label>
+    </div>
+  </fieldset>
+
+  <details class="advanced">
+    <summary>Opciones avanzadas</summary>
+    <label>Flags rsync extra
+      <input name="rsync_extra" id="rsync_extra" value="{{ form.rsync_extra or '' }}" placeholder="--exclude='*.tmp'">
+    </label>
+    <button type="button" class="secondary" id="preview-btn">Ver comando rsync</button>
+    <label>Comando rsync (déjalo vacío para usar el generado automáticamente)
+      <textarea name="comando_rsync" id="comando_rsync" rows="3" placeholder="Se generará automáticamente">{{ form.comando_rsync or '' }}</textarea>
+    </label>
+  </details>
+
+  <button type="submit" class="primary">Guardar tarea</button>
+</form>
+{% endif %}
+{% endblock %}

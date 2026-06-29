@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Panel{% endblock %}
+{% block content %}
+<h1>Panel general</h1>
+<div class="cards">
+  <div class="card"><span class="num">{{ n_hosts }}</span><span class="lbl">Hosts origen</span></div>
+  <div class="card"><span class="num">{{ n_destinos }}</span><span class="lbl">Destinos</span></div>
+  <div class="card"><span class="num">{{ n_tareas }}</span><span class="lbl">Tareas</span></div>
+  <div class="card warn"><span class="num">{{ en_progreso }}</span><span class="lbl">En progreso</span></div>
+  <div class="card danger"><span class="num">{{ fallidas }}</span><span class="lbl">Fallidas</span></div>
+</div>
+
+<h2>Últimas ejecuciones</h2>
+<table class="data">
+  <thead><tr><th>Host</th><th>Carpeta</th><th>Inicio</th><th>Fin</th><th>Resultado</th></tr></thead>
+  <tbody>
+  {% for e in ultimas %}
+    <tr>
+      <td>{{ e.host }}</td>
+      <td>{{ e.tarea }}</td>
+      <td>{{ e.inicio|datetime_fmt }}</td>
+      <td>{{ e.fin|datetime_fmt }}</td>
+      <td><span class="badge {{ e.resultado }}">{{ e.resultado or '—' }}</span></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">Sin ejecuciones todavía.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

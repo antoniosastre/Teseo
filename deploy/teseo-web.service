@@ -1,0 +1,16 @@
+[Unit]
+Description=Teseo - Panel web de copias rsync
+After=network.target mysql.service mariadb.service
+
+[Service]
+Type=simple
+User=teseo
+Group=teseo
+WorkingDirectory=/opt/teseo
+Environment=TESEO_CONFIG=/etc/teseo/config.ini
+ExecStart=/opt/teseo/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

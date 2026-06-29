@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Tarea{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ tarea.host }} · {{ tarea.carpeta_origen }}</h1>
+  <a href="/origenes" class="btn secondary">Volver</a>
+</div>
+
+<div class="form-card">
+  <div class="grid2">
+    <div><strong>Destino:</strong> {{ tarea.destino }}</div>
+    <div><strong>Tipo:</strong> {{ tarea.tipo }}</div>
+    <div><strong>Programación:</strong> <code>{{ tarea.cron }}</code></div>
+    <div><strong>Retención:</strong> {{ tarea.retencion }} snapshots</div>
+    <div><strong>Estado:</strong> <span class="badge estado-{{ tarea.estado }}">{{ tarea.estado }}</span></div>
+    <div><strong>Puntuación protección:</strong> <span class="score score-{{ tarea.score_clase }}">{{ tarea.score }}</span> ({{ tarea.score_clase }})</div>
+    <div><strong>Última copia:</strong> {{ tarea.last_run_at|datetime_fmt }}</div>
+    <div><strong>Siguiente:</strong> {{ tarea.next_run_at|datetime_fmt }}</div>
+  </div>
+  {% if tarea.comando_rsync %}
+  <p><strong>Comando rsync personalizado:</strong></p>
+  <pre class="cmd">{{ tarea.comando_rsync }}</pre>
+  {% endif %}
+  <form method="post" action="/tareas/{{ tarea.id }}/run" class="inline"><button class="primary">Ejecutar ya</button></form>
+</div>
+
+<h2>Historial de ejecuciones</h2>
+<table class="data">
+  <thead><tr><th>Inicio</th><th>Fin</th><th>Resultado</th><th>Transferido</th><th>Snapshot</th><th>Detalle</th></tr></thead>
+  <tbody>
+  {% for e in ejecuciones %}
+    <tr>
+      <td>{{ e.inicio|datetime_fmt }}</td>
+      <td>{{ e.fin|datetime_fmt }}</td>
+      <td><span class="badge {{ e.resultado }}">{{ e.resultado or '—' }}</span></td>
+      <td>{{ e.bytes|human_bytes }}</td>
+      <td><small>{{ e.snapshot or '—' }}</small></td>
+      <td><small>{{ e.error or e.resumen or '' }}</small></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">Sin ejecuciones todavía.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
