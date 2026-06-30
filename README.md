@@ -5,6 +5,10 @@ programa y supervisa backups con `rsync`, pero **sin que los datos pasen por el
 servidor del panel**. El controlador abre SSH al **host origen** y lanza ahí el
 `rsync` que empuja los datos **directamente al destino**.
 
+> 📒 **Para continuar el desarrollo** (decisiones cerradas, estado del proyecto,
+> trabajo pendiente y convenciones) consulta [`CLAUDE.md`](CLAUDE.md): es la memoria
+> del proyecto pensada para retomar la sesión desde cualquier entorno.
+
 ```
 ┌────────────┐      SSH (control)      ┌────────────┐
 │  Teseo     │ ───────────────────────▶│  Origen    │
