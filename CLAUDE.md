@@ -1,0 +1,207 @@
+# CLAUDE.md — Memoria del proyecto Teseo
+
+Documento de contexto para que cualquier sesión de Claude (incluso en otra cuenta)
+pueda retomar el trabajo sin perder información. Mantenlo actualizado al cerrar cada
+hito relevante.
+
+---
+
+## 1. Qué es Teseo
+
+Aplicación web para **crear, ejecutar y supervisar copias de seguridad con `rsync`**.
+El servidor del panel es un **"controlador aéreo"**: orquesta, programa y monitoriza,
+pero **los datos NUNCA pasan por él**. El controlador abre SSH al host **origen** y
+lanza ahí el `rsync` que empuja los datos **directamente al destino**.
+
+```
+┌────────────┐      SSH (control)      ┌────────────┐
+│  Teseo     │ ───────────────────────▶│  Origen    │
+│ (panel +   │                         │  (servidor │
+│  daemon)   │ ◀── estado/progreso ────│   con SSH) │
+└────────────┘                         └─────┬──────┘
+       ▲                                      │ rsync directo (datos)
+       │ SSH (control: symlink/retención)     ▼
+       └──────────────────────────────▶┌────────────┐
+                                        │  Destino   │
+                                        └────────────┘
+```
+
+Idioma del proyecto: **español** (UI, comentarios, mensajes de commit, identificadores
+de dominio como `tarea`, `destino`, `origen`, `ubicacion`).
+
+---
+
+## 2. Estado actual (al día de hoy)
+
+- **PR #1 — FUSIONADO** en `main`: implementación inicial completa.
+  https://github.com/antoniosastre/Teseo/pull/1
+  (No reabrir ni crear otro PR para ese mismo cambio.)
+- El repositorio nació **vacío**. Se creó un commit raíz `Initial commit` en `main` y la
+  rama de trabajo se rebasó encima para poder abrir un PR con historia común. Tenlo en
+  cuenta si vuelve a aparecer un problema de "no history in common".
+- **No hay CI real** configurado (solo el workflow gestionado por GitHub "Dependency
+  Graph" de Dependabot). Si se desea CI, habría que añadir un workflow que ejecute
+  `pytest` (ver §7).
+- **14 tests en verde** (`pytest -q`).
+
+### Rama de desarrollo
+- La tarea original usaba la rama `claude/rsync-backup-panel-requirements-j9nv3l` (ya
+  fusionada). Para cambios nuevos, crea una rama `claude/<descripcion>` partiendo de
+  `origin/main` y abre PR contra `main`.
+
+---
+
+## 3. Decisiones de arquitectura cerradas (NO reabrir sin motivo)
+
+| Decisión | Elección |
+|----------|----------|
+| Stack | **Python** — FastAPI + Jinja (web) y daemon systemd independiente |
+| BD | **MySQL/MariaDB** vía SQLAlchemy 2.0 + PyMySQL |
+| Confianza SSH origen→destino | **Auto-provisión** por el controlador (genera par ed25519, privada al origen, pública a `authorized_keys` del destino) |
+| Scheduler | **Daemon propio** (`teseod`), reloj interno, cron por tarea, concurrencia |
+| Credenciales | **Claves SSH preferidas**; contraseña como fallback. Secretos **cifrados (Fernet/AES)** en BD; la clave de cifrado vive en `config.ini`, fuera de la BD |
+| "Incremental" | **Snapshots con histórico** vía `rsync --link-dest` (estilo Time Machine) |
+| Retención | Configurable por tarea (nº de snapshots) |
+| Avisos | **Email SMTP** ante fallo de copia u origen inaccesible |
+| Puntuación de protección | Módulo aislado `scoring/` con **fórmula PROVISIONAL** (pendiente la definitiva del usuario) |
+
+Web y daemon **no se comunican directamente**: coordinan a través de la BD (la web marca
+`run_now`/programación; el daemon toma las tareas vencidas).
+
+---
+
+## 4. Estructura del repositorio
+
+```
+app/                      # Web FastAPI + Jinja
+  main.py                 # create_app(): middleware "gate" (redirige a /install si no hay config), SessionMiddleware, monta routers
+  config.py               # carga/escritura config.ini (DatabaseConfig, SmtpConfig, AppConfig); CONFIG_PATH (env TESEO_CONFIG)
+  db.py                   # engine/sesión SQLAlchemy; session_scope(); init_engine()/reset_engine()
+  crypto.py               # SecretBox (Fernet) + generate_key()
+  models.py               # ORM: Admin, Ubicacion, HostOrigen, Destino, SshKeypair, Tarea, Ejecucion + enums de dominio
+  auth.py                 # hash/verify argon2, authenticate(), helpers de sesión
+  deps.py                 # require_login (lanza RedirectException), get_secret_box()
+  templating.py           # Jinja2Templates + filtros human_bytes / datetime_fmt
+  services.py             # ssh_target_for_host/destino, host_semaforo(), tarea_score()
+  rsync_cmd.py            # build_plan()/preview_command(): construye comando rsync y layout de carpetas
+  remote.py               # paramiko: connect(), run(), test_connection(), list_directories(), disk_usage()
+  installer/              # asistente /install (service.py: test_connection, create_database, run_install)
+  routers/               # dashboard, auth, ubicaciones, destinos, origenes, tareas, estado (SSE)
+  templates/ static/      # Jinja + style.css + app.js (expandibles, SSE, examinar carpetas, preview, alta inline)
+daemon/                   # Servicio teseod
+  teseod.py               # bucle scheduler (clase Daemon), concurrencia MAX_CONCURRENCY=3, monitor cada 300s
+  keyprov.py              # ensure_trust(): genera/instala/valida claves SSH origen→destino
+  runner.py               # run_tarea(): ejecuta rsync con streaming de progreso, post-proceso incremental
+  retention.py            # set_current_symlink(), apply_retention()
+  monitor.py              # check_destinos() (df/du), check_origenes() (accesibilidad)
+  notify.py               # email SMTP (notify_failure, notify_unreachable)
+scoring/__init__.py       # score()/classify() — PLACEHOLDER reemplazable
+migrations/schema.sql     # esquema de referencia (el instalador lo crea solo con create_all)
+deploy/                   # teseo-web.service, teseod.service (systemd)
+tests/                    # pytest sobre SQLite en memoria (conftest.py, test_app.py, test_rsync_cmd.py)
+config.ini.example        # ejemplo (el real lo genera /install; está en .gitignore)
+```
+
+---
+
+## 5. Modelo de datos (resumen)
+
+- **admins**(username único, password_hash argon2, email)
+- **ubicaciones**(nombre único) — ubicación física para puntuar protección
+- **hosts_origen**(nombre único, host, puerto, usuario, auth_method key|password,
+  secret_cifrado, host_key, es_raid single|raid1|raid2, ubicacion_id, estado_conexion)
+- **destinos**(nombre único, conexión SSH, carpeta_base, proteccion single|raid1|raid2,
+  ubicacion_id, estado, espacio_total/backups/libre)
+- **ssh_keypairs**(private_key_cifrada, public_key, fingerprint, estado)
+- **tareas**(host_origen_id, destino_id, carpeta_origen, tipo espejo|incremental, cron,
+  comando_rsync override, rsync_extra, retencion, estado, porcentaje, run_now, activa,
+  last_run_at, next_run_at, ssh_keypair_id) — UNIQUE(host,destino,carpeta)
+- **ejecuciones**(tarea_id, inicio, fin, resultado ok|fallo|cancelada, bytes_transferidos,
+  snapshot_path, resumen, error) — historial
+
+Enums de dominio definidos en `app/models.py` (AUTH_METHODS, PROTECCIONES, TIPOS_TAREA,
+ESTADOS_TAREA, ESTADOS_CONEXION, RESULTADOS_EJEC).
+
+---
+
+## 6. Cómo ejecutar
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt        # o requirements-dev.txt para tests
+
+# Web (la 1ª vez redirige al asistente /install)
+uvicorn app.main:app --host 127.0.0.1 --port 8080
+# Daemon (en otra terminal o como servicio)
+python -m daemon.teseod
+```
+
+- Sin `config.ini`, TODA ruta redirige a `/install`. El asistente prueba MySQL, crea BD y
+  tablas (`Base.metadata.create_all`), crea el primer admin y escribe `config.ini`
+  (genera `secret_key` y `encryption_key`).
+- Ruta del config: `./config.ini` por defecto; override con la variable `TESEO_CONFIG`.
+- Despliegue: ver `deploy/*.service` (usuario `teseo`, `/opt/teseo`,
+  `TESEO_CONFIG=/etc/teseo/config.ini`).
+
+### Layout de copias en el destino
+```
+<carpeta_base>/<host_origen>/<tipo_tarea>/<carpeta_origen>/<contenido>
+```
+- **espejo**: `.../current/` con `--delete`.
+- **incremental**: `.../<YYYY-MM-DD_HHMMSS>/` + enlace `current` → último snapshot, con
+  `--link-dest=../current` (hardlinks). `apply_retention()` conserva los N más recientes.
+
+---
+
+## 7. Testing
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q          # 14 tests, SQLite en memoria
+```
+
+- `tests/conftest.py`: monta config.ini efímero + engine SQLite (StaticPool) + admin +
+  `TestClient`. Fixtures `client` y `auth_client`.
+- Cubre: login, cifrado de secretos, CRUD, generación de comandos rsync (espejo/incremental),
+  scoring, acciones sobre tareas, SSE json.
+- **Limitación**: el flujo rsync extremo-a-extremo necesita MySQL real + 2 hosts SSH
+  (origen y destino), no disponibles en CI. La lógica de aplicación sí se valida.
+- Si añades CI: workflow que instale `requirements-dev.txt` y ejecute `pytest`.
+
+---
+
+## 8. Trabajo pendiente / próximos pasos
+
+1. **Fórmula definitiva de la puntuación de protección** (lo único explícitamente
+   pendiente). Editar SOLO `scoring/__init__.py` (`score()` y `classify()`); el resto de
+   la app la consume vía `app/services.py:tarea_score()`. Criterio provisional actual:
+   RAID origen (raid1=+1, raid2=+2) + RAID destino (igual) + ubicación física distinta (+2);
+   clasificación mínima/básica/buena/excelente. MAX_SCORE=6.
+2. Posibles mejoras no pedidas aún: gestión de múltiples admins desde la UI, edición de
+   destinos/hosts/tareas existentes (hoy hay alta y borrado, no edición), paginación del
+   historial, CI con pytest, cancelación de copias en curso, throttling de `du` en
+   destinos grandes (ya se cachea en BD vía monitor).
+
+---
+
+## 9. Convenciones y avisos importantes
+
+- **rsync se ejecuta en el ORIGEN** (vía SSH desde el controlador), empujando al destino.
+  Los datos no pasan por el panel. No romper esta invariante.
+- **Secretos**: nunca guardar contraseñas/claves en claro. Usar `SecretBox`
+  (`app/crypto.py`); la clave de cifrado está en `config.ini` (`[security] encryption_key`).
+- **`config.ini` está en `.gitignore`** — contiene secretos. No commitearlo nunca.
+- Estilo: comentarios y UI en español; seguir el estilo existente (dataclasses para config,
+  `session_scope()` para transacciones, routers finos que delegan en `services`/`remote`).
+- Semáforo de host (`services.host_semaforo`): rojo=inaccesible, naranja=alguna fallida,
+  amarillo=alguna en progreso, verde=todo ok, gris=sin tareas.
+- El daemon nunca debe morir por una excepción de una tarea (bucle protegido en `teseod`).
+
+---
+
+## 10. Entorno y GitHub
+
+- Repo: `antoniosastre/teseo`. Acceso de la sesión limitado a ese repo.
+- Operaciones GitHub: vía herramientas MCP `mcp__github__*` (no hay `gh` CLI).
+- Tras push, abrir PR contra `main` (listo para revisión, no draft).
+- `git push -u origin <rama>` con reintentos exponenciales ante errores de red.
