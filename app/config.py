@@ -62,6 +62,7 @@ class AppConfig:
     secret_key: str          # clave de sesión web
     encryption_key: str      # clave Fernet para cifrar secretos en BD
     smtp: SmtpConfig
+    https_only: bool = False  # cookie de sesión sólo por HTTPS (activar en producción)
 
     @property
     def configured(self) -> bool:
@@ -96,6 +97,7 @@ def load_config(path: Path | None = None) -> AppConfig | None:
     sec = parser["security"]
     secret_key = sec.get("secret_key", "")
     encryption_key = sec.get("encryption_key", "")
+    https_only = sec.get("https_only", "false").lower() == "true"
 
     smtp_section = parser["smtp"] if "smtp" in parser else {}
     smtp = SmtpConfig(
@@ -107,7 +109,10 @@ def load_config(path: Path | None = None) -> AppConfig | None:
         use_tls=(smtp_section.get("use_tls", "true").lower() == "true") if smtp_section else True,
     )
 
-    return AppConfig(database=database, secret_key=secret_key, encryption_key=encryption_key, smtp=smtp)
+    return AppConfig(
+        database=database, secret_key=secret_key, encryption_key=encryption_key,
+        smtp=smtp, https_only=https_only,
+    )
 
 
 def write_config(
@@ -116,6 +121,7 @@ def write_config(
     encryption_key: str,
     smtp: SmtpConfig | None = None,
     path: Path | None = None,
+    https_only: bool = False,
 ) -> None:
     """Persiste la configuración en disco con permisos restrictivos (0600)."""
     path = path or CONFIG_PATH
@@ -130,6 +136,8 @@ def write_config(
     parser["security"] = {
         "secret_key": secret_key,
         "encryption_key": encryption_key,
+        # Producción tras TLS: poner a true para que la cookie de sesión sea Secure.
+        "https_only": "true" if https_only else "false",
     }
     if smtp and smtp.host:
         parser["smtp"] = {

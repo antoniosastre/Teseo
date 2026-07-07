@@ -21,6 +21,30 @@ from dataclasses import dataclass
 BASE_FLAGS = ["-a", "-z", "--info=progress2", "--stats"]
 
 
+# Metacaracteres de shell que permitirían encadenar/inyectar comandos en un
+# override. Un override es un "modo experto": debe ser UNA invocación de rsync,
+# nunca una tubería, subshell ni redirección.
+_SHELL_METACHARS = (";", "|", "&", "`", "$(", ">", "<", "\n", "\r")
+
+
+def validate_override(comando: str) -> str | None:
+    """Valida el override manual de comando. Devuelve mensaje de error o None.
+
+    Reglas: debe empezar por ``rsync`` y no contener metacaracteres de shell que
+    permitan encadenar comandos. No neutraliza los vectores propios de rsync
+    (``-e``/``--rsync-path``), que quedan como riesgo aceptado del modo experto.
+    """
+    cmd = comando.strip()
+    if not cmd:
+        return None
+    tokens = cmd.split()
+    if tokens[0] != "rsync":
+        return "El comando personalizado debe empezar por 'rsync'."
+    if any(mc in cmd for mc in _SHELL_METACHARS):
+        return "El comando personalizado no puede contener ; | & ` $( > < ni saltos de línea."
+    return None
+
+
 def sanitize_component(value: str) -> str:
     """Convierte una ruta/origen en un nombre de subcarpeta seguro y plano."""
     value = value.strip().strip("/")
@@ -83,7 +107,10 @@ def build_plan(
         if delete:
             flags.append("--delete")
 
-    extra = shlex.split(extra_flags) if extra_flags else []
+    # shlex.split respeta las comillas del usuario; volvemos a citar cada token
+    # con shlex.quote antes de unir, para que ningún metacarácter quede a merced
+    # del shell remoto (evita inyección vía rsync_extra, p. ej. "--rsh=$(...)").
+    extra = [shlex.quote(t) for t in shlex.split(extra_flags)] if extra_flags else []
 
     src = carpeta_origen.rstrip("/") + "/"
     remote = f"{destino_usuario}@{destino_host}:{dest_target}/"

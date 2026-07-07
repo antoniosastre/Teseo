@@ -9,7 +9,7 @@ from app.db import session_scope
 from app.deps import get_secret_box, require_login
 from app.models import PROTECCIONES, TIPOS_TAREA, Destino, HostOrigen, Tarea, Ubicacion
 from app.remote import SshError, SshTarget, list_directories, test_connection
-from app.rsync_cmd import preview_command
+from app.rsync_cmd import preview_command, validate_override
 from app.services import host_semaforo, ssh_target_for_host, tarea_score
 from app.templating import templates
 
@@ -126,7 +126,13 @@ async def host_test(host_id: int, _: int = Depends(require_login)):
         if not h:
             return JSONResponse({"ok": False, "message": "No existe"}, status_code=404)
         target = ssh_target_for_host(h, box)
-    ok, message = test_connection(target)
+    ok, message, learned = test_connection(target)
+    # Primer uso: fijamos (pinning) la clave de host aprendida para futuras conexiones.
+    if learned:
+        with session_scope() as session:
+            h = session.get(HostOrigen, host_id)
+            if h and not h.host_key:
+                h.host_key = learned
     return JSONResponse({"ok": ok, "message": message})
 
 
@@ -237,6 +243,12 @@ async def tarea_crear(
             return fail("La expresión de programación (cron) no es válida.")
     except Exception:  # noqa: BLE001
         return fail("La expresión de programación (cron) no es válida.")
+
+    # Validación del override manual (si lo hay): debe ser una invocación rsync
+    # sin metacaracteres de shell (evita inyección de comandos en el origen).
+    override_error = validate_override(comando_rsync)
+    if override_error:
+        return fail(override_error)
 
     with session_scope() as session:
         if not session.get(HostOrigen, host_id) or not session.get(Destino, destino_id):
