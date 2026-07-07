@@ -51,6 +51,32 @@ def score(inp: ScoreInputs) -> int:
     return pts
 
 
+@dataclass
+class CopiaInputs:
+    """Protección del lado destino de una copia concreta (una tarea del origen)."""
+
+    destino_proteccion: str
+    ubicacion_distinta: bool
+
+
+def origen_score(origen_proteccion: str, copias: list[CopiaInputs]) -> int:
+    """Puntuación de protección de un ORIGEN (0..MAX_SCORE).
+
+    - Redundancia del origen (RAID del volumen): raid1 +1 / raid2 +2.
+    - Si el origen tiene ≥1 copia: +1.
+    - Lado destino, regla "mejor copia": máximo, sobre las tareas del origen, de
+      (RAID destino + ubicación distinta). Sin copias no suma nada de esto.
+    """
+    pts = RAID_POINTS.get(origen_proteccion, 0)
+    if copias:
+        pts += 1  # el origen tiene copia de seguridad
+        pts += max(
+            RAID_POINTS.get(c.destino_proteccion, 0) + (1 if c.ubicacion_distinta else 0)
+            for c in copias
+        )
+    return pts
+
+
 def classify(points: int) -> str:
     """Etiqueta cualitativa a partir de la puntuación (para tooltip/aria)."""
     if points >= 5:

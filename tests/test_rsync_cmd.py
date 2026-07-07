@@ -3,7 +3,15 @@ from __future__ import annotations
 
 from app.crypto import SecretBox, generate_key
 from app.rsync_cmd import build_plan, dest_task_dir, sanitize_component
-from scoring import MAX_SCORE, ScoreInputs, classify, score, score_bar
+from scoring import (
+    MAX_SCORE,
+    CopiaInputs,
+    ScoreInputs,
+    classify,
+    origen_score,
+    score,
+    score_bar,
+)
 
 
 def test_sanitize_component():
@@ -59,6 +67,27 @@ def test_classify_labels():
     assert classify(2) == "básica"
     assert classify(4) == "buena"
     assert classify(6) == "excelente"
+
+
+def test_origen_score_sin_copias():
+    # raid1 en el volumen, sin ninguna tarea -> solo el +1 del RAID origen.
+    assert origen_score("raid1", []) == 1
+    assert origen_score("single", []) == 0
+
+
+def test_origen_score_mejor_copia():
+    # Origen raid2 (2) + tiene copia (1) + mejor destino de entre sus tareas.
+    copias = [
+        CopiaInputs(destino_proteccion="single", ubicacion_distinta=False),   # destino: 0
+        CopiaInputs(destino_proteccion="raid2", ubicacion_distinta=True),     # destino: 2+1=3 (mejor)
+    ]
+    # 2 (raid2 origen) + 1 (tiene copia) + 3 (mejor copia) = 6
+    assert origen_score("raid2", copias) == 6 == MAX_SCORE
+
+
+def test_origen_score_una_copia_local():
+    # single origen (0) + copia (1) + destino raid1 (1) misma ubicación (0) = 2
+    assert origen_score("single", [CopiaInputs("raid1", False)]) == 2
 
 
 def test_score_bar_mapeo_usuario():
