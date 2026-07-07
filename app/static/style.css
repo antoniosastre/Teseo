@@ -13,6 +13,7 @@ code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 
 .topbar{display:flex;align-items:center;gap:2rem;padding:.75rem 1.5rem;background:var(--panel);border-bottom:1px solid var(--border)}
 .topbar .brand{font-weight:700;font-size:1.1rem}
+.topbar .brand .ver{font-weight:400;font-size:.7rem;color:var(--muted);vertical-align:super}
 .topbar nav{display:flex;gap:1rem;flex:1}
 .topbar nav a{color:var(--muted);padding:.35rem .6rem;border-radius:.4rem}
 .topbar nav a.active,.topbar nav a:hover{color:var(--text);background:var(--panel2);text-decoration:none}

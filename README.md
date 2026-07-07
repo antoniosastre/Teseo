@@ -77,10 +77,11 @@ python -m daemon.teseod
 Abre `http://127.0.0.1:8080`, completa el asistente y empieza a añadir destinos,
 hosts y orígenes.
 
-### Despliegue como servicio (systemd)
+### Despliegue como servicio (systemd) y actualizaciones
 
-Copia el proyecto a `/opt/teseo`, crea el usuario `teseo`, ubica la config en
-`/etc/teseo/config.ini` y habilita los servicios:
+Guía completa (servidor, MariaDB, systemd, nginx/TLS y **releases**) en
+[`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md). En resumen: proyecto en `/opt/teseo`,
+usuario `teseo`, config en `/etc/teseo/config.ini` (`TESEO_CONFIG`), y:
 
 ```bash
 cp deploy/teseo-web.service deploy/teseod.service /etc/systemd/system/
@@ -88,25 +89,26 @@ systemctl daemon-reload
 systemctl enable --now teseo-web teseod
 ```
 
-La variable `TESEO_CONFIG` indica la ruta del fichero de configuración.
+**Versiones**: `scripts/release.sh X.Y.Z` publica una Release en GitHub;
+`scripts/update.sh [vX.Y.Z]` actualiza el servidor a una release.
 
 ## Layout de las copias en el destino
 
 ```
-<carpeta_base>/<host_origen>/<tipo_tarea>/<carpeta_origen>/<contenido>
+<carpeta_base>/<host>/<volumen>/<origen>/<tipo_tarea>/<contenido>
 ```
 
 - **espejo**: `.../current/` (réplica exacta, con `--delete`).
 - **incremental**: `.../<YYYY-MM-DD_HHMMSS>/` + enlace `current` → último snapshot,
-  con `--link-dest` para deduplicar por hardlinks. La retención conserva los N
-  snapshots más recientes.
+  con `--link-dest` para deduplicar por hardlinks. La retención borra los snapshots
+  con más de N **días** (conserva siempre el más reciente).
 
 ## Puntuación de protección
 
-`scoring/__init__.py` implementa un criterio **provisional** (pendiente de la
-fórmula definitiva): suma puntos por RAID en origen, RAID en destino y por que la
-copia esté en una ubicación física distinta. Para ajustarla basta con editar
-`score()` y `classify()` sin tocar el resto de la aplicación.
+`scoring/__init__.py` puntúa la protección **por origen** (regla "mejor copia"):
+RAID del volumen + tener copia + RAID del destino + destino en ubicación física
+distinta (máx. 6). La UI la muestra como barra gráfica. Para ajustar el criterio
+basta con editar ese módulo aislado.
 
 ## Tests
 

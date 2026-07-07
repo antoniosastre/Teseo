@@ -1,0 +1,25 @@
+name: Release
+
+# Al empujar un tag vX.Y.Z se crea una Release de GitHub con notas automáticas
+# generadas a partir de los PR/commits desde la release anterior.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Crear Release con notas automáticas
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --generate-notes --verify-tag

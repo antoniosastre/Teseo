@@ -167,6 +167,34 @@ def explorar_host(session, host: HostOrigen, box: SecretBox) -> None:
     persistir_descubrimiento(session, host, volumenes)
 
 
+def evolucion_tamano(origen: Origen, limite: int = 30) -> tuple[list[dict], dict | None]:
+    """Serie reciente de tamaños del origen + resumen de crecimiento.
+
+    Devuelve (muestras, resumen). ``muestras`` van de más reciente a más antigua,
+    cada una con su delta respecto a la anterior medición. ``resumen`` es None si
+    aún no hay al menos dos mediciones para comparar.
+    """
+    hist = list(origen.historicos)[:limite]  # relación ya ordenada desc por timestamp
+    muestras = []
+    for i, h in enumerate(hist):
+        anterior = hist[i + 1].bytes if i + 1 < len(hist) else None
+        muestras.append({
+            "timestamp": h.timestamp,
+            "bytes": h.bytes,
+            "delta": (h.bytes - anterior) if anterior is not None else None,
+        })
+    resumen = None
+    if len(hist) >= 2:
+        resumen = {
+            "actual": hist[0].bytes,
+            "delta_anterior": hist[0].bytes - hist[1].bytes,
+            "delta_ventana": hist[0].bytes - hist[-1].bytes,
+            "muestras": len(hist),
+            "desde": hist[-1].timestamp,
+        }
+    return muestras, resumen
+
+
 def ultima_copia_ok(origen: Origen) -> dt.datetime | None:
     """Timestamp de la última ejecución correcta entre todas las tareas del origen."""
     fines = [
