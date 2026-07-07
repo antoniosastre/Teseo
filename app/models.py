@@ -135,7 +135,8 @@ class Origen(Base):
         back_populates="origen", cascade="all, delete-orphan"
     )
     historicos: Mapped[list["HistoricoTamano"]] = relationship(
-        back_populates="origen", cascade="all, delete-orphan", order_by="HistoricoTamano.timestamp.desc()"
+        back_populates="origen", cascade="all, delete-orphan",
+        order_by="HistoricoTamano.timestamp.desc(), HistoricoTamano.id.desc()",
     )
 
 

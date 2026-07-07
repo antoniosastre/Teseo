@@ -33,6 +33,7 @@ from app.remote import SshError, test_connection
 from app.rsync_cmd import preview_command, validate_override
 from app.services import (
     estado_copia,
+    evolucion_tamano,
     explorar_host,
     host_semaforo,
     opciones_conector,
@@ -264,6 +265,7 @@ async def origen_detalle(origen_id: int, request: Request, _: int = Depends(requ
         } for t in o.tareas]
         destinos = [{"id": d.id, "nombre": d.nombre}
                     for d in session.scalars(select(Destino).order_by(Destino.nombre))]
+        muestras, evolucion = evolucion_tamano(o)
         data = {
             "id": o.id, "nombre": o.nombre, "tipo": o.tipo, "ruta": o.ruta,
             "estado": o.estado, "tamano_bytes": o.tamano_bytes,
@@ -273,8 +275,9 @@ async def origen_detalle(origen_id: int, request: Request, _: int = Depends(requ
         }
     return templates.TemplateResponse(
         "origen_detalle.html",
-        {"request": request, "active": "origenes", "origen": data,
-         "destinos": destinos, "tipos": TIPOS_TAREA, "error": request.query_params.get("error")},
+        {"request": request, "active": "origenes", "origen": data, "destinos": destinos,
+         "tipos": TIPOS_TAREA, "muestras": muestras, "evolucion": evolucion,
+         "error": request.query_params.get("error")},
     )
 
 

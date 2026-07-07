@@ -88,6 +88,34 @@ def test_nuevos_huerfanos_sin_tareas_no_avisa(client):
         assert nuevos_huerfanos(h, {oid: "activo"}) == []
 
 
+# --- Evolución de tamaño -----------------------------------------------------
+
+def test_evolucion_tamano_deltas_y_resumen(client):
+    from daemon.analyzer import registrar_tamano
+    from app.services import evolucion_tamano
+    _, oid = _host_con_origen()
+    for tam in (1000, 1200, 1500):   # tres mediciones crecientes
+        with session_scope() as s:
+            registrar_tamano(s, oid, tam)
+    with session_scope() as s:
+        o = s.get(Origen, oid)
+        muestras, resumen = evolucion_tamano(o)
+    # Más reciente primero; delta de la más reciente vs la anterior = 1500-1200.
+    assert muestras[0]["bytes"] == 1500 and muestras[0]["delta"] == 300
+    assert resumen["actual"] == 1500
+    assert resumen["delta_anterior"] == 300      # 1500 - 1200
+    assert resumen["delta_ventana"] == 500       # 1500 - 1000
+    assert resumen["muestras"] == 3
+
+
+def test_evolucion_sin_datos_no_resumen(client):
+    from app.services import evolucion_tamano
+    _, oid = _host_con_origen()
+    with session_scope() as s:
+        muestras, resumen = evolucion_tamano(s.get(Origen, oid))
+    assert muestras == [] and resumen is None
+
+
 # --- Ajustes -----------------------------------------------------------------
 
 def test_settings_defaults_y_set(client):

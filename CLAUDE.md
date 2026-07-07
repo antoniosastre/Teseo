@@ -202,8 +202,13 @@ pytest -q          # 14 tests, SQLite en memoria
    (`plesk bin subscription --list`), y correo/dumps/backups/rutas-extra según opciones.
    El framework gana `opciones_descubrimiento()` (wizard dinámico) y `HostOrigen.conector_opciones`
    (persistidas para la re-exploración). BD nunca se copia en vivo: se respaldan dumps externos.
-5. PENDIENTE: analizador de **evolución** del tamaño a partir del histórico. Mejoras varias:
-   múltiples admins UI, cancelación de copias, paginación.
+5. **Despliegue y releases** (rama `claude/release-infra`): `VERSION` (en la barra del panel),
+   workflow que crea Release al empujar tag `vX.Y.Z`, `scripts/release.sh` (publicar) y
+   `scripts/update.sh` (actualizar servidor), `docs/DESPLIEGUE.md` (runbook). **Alembic**
+   para migraciones (`alembic/`, baseline vacío auto-sellante; `update.sh` hace
+   `alembic upgrade head`). Analizador de **evolución de tamaño** en el detalle del origen
+   (histórico + crecimiento; `services.evolucion_tamano`).
+6. PENDIENTE: múltiples admins UI, cancelación de copias en curso, paginación del historial.
 
 ---
 

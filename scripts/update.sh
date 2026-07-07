@@ -29,10 +29,11 @@ git checkout -q "$TAG"
 echo "==> Instalando dependencias"
 .venv/bin/pip install -q -r requirements.txt
 
-# Crea las TABLAS nuevas que hubiera (create_all es aditivo: NO altera columnas
-# de tablas existentes; los cambios de columnas requieren migración manual).
-echo "==> Sincronizando esquema (tablas nuevas)"
-.venv/bin/python -c "from app.db import init_engine; from app.models import Base; Base.metadata.create_all(init_engine())"
+# Aplica las migraciones de esquema pendientes (Alembic). Sobre una BD creada por
+# el instalador (create_all) y aún sin sellar, esto ejecuta el baseline vacío y la
+# deja sellada; en adelante aplica las migraciones de cada versión.
+echo "==> Aplicando migraciones de esquema (alembic upgrade head)"
+.venv/bin/alembic upgrade head
 
 echo "==> Reiniciando servicios"
 sudo systemctl restart teseo-web teseod

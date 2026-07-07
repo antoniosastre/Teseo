@@ -14,6 +14,33 @@
 
 {% if error %}<div class="alert error">{{ err_label.get(error, error) }}</div>{% endif %}
 
+<h2>Evolución de tamaño</h2>
+{% if muestras %}
+{% if evolucion %}
+<p class="muted">
+  Actual: <strong>{{ evolucion.actual|human_bytes }}</strong>.
+  Desde la última medición:
+  {% if evolucion.delta_anterior >= 0 %}+{{ evolucion.delta_anterior|human_bytes }}{% else %}−{{ (-evolucion.delta_anterior)|human_bytes }}{% endif %}.
+  En las últimas {{ evolucion.muestras }} mediciones (desde {{ evolucion.desde|datetime_fmt }}):
+  {% if evolucion.delta_ventana >= 0 %}+{{ evolucion.delta_ventana|human_bytes }}{% else %}−{{ (-evolucion.delta_ventana)|human_bytes }}{% endif %}.
+</p>
+{% endif %}
+<table class="data">
+  <thead><tr><th>Fecha</th><th>Tamaño</th><th>Δ vs anterior</th></tr></thead>
+  <tbody>
+  {% for m in muestras %}
+    <tr>
+      <td>{{ m.timestamp|datetime_fmt }}</td>
+      <td>{{ m.bytes|human_bytes }}</td>
+      <td>{% if m.delta is none %}—{% elif m.delta >= 0 %}+{{ m.delta|human_bytes }}{% else %}−{{ (-m.delta)|human_bytes }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Aún no hay mediciones de tamaño. El analizador las irá registrando.</p>
+{% endif %}
+
 <h2>Tareas de copia</h2>
 {% if origen.tareas %}
 <table class="data">

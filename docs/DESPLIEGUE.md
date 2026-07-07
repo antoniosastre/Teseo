@@ -147,14 +147,26 @@ sudo -u teseo TESEO_CONFIG=/etc/teseo/config.ini scripts/update.sh          # ú
 sudo -u teseo TESEO_CONFIG=/etc/teseo/config.ini scripts/update.sh v0.2.0   # versión concreta
 ```
 
-`update.sh` hace `git fetch`, `checkout` del tag, reinstala dependencias, crea las
-**tablas** nuevas que hubiera y reinicia los servicios.
+`update.sh` hace `git fetch`, `checkout` del tag, reinstala dependencias, aplica las
+**migraciones** de esquema (`alembic upgrade head`) y reinicia los servicios.
 
-> ⚠️ **Migraciones de esquema**: `create_all` es **aditivo** — crea tablas nuevas
-> pero **no** añade/renombra columnas en tablas ya existentes. Si una versión futura
-> cambia columnas, habrá que aplicar la migración a mano (o incorporar Alembic, ya
-> anotado como mejora). Para el primer despliegue no aplica: el asistente crea el
-> esquema completo actual.
+### Migraciones de esquema (Alembic)
+
+- El **esquema inicial** lo crea el asistente de instalación (`create_all`). Alembic
+  parte de un **baseline vacío** que se auto-sella la primera vez que corre
+  `alembic upgrade head` (es un no-op sobre el esquema ya creado). A partir de ahí,
+  cada cambio de esquema va en su propia migración.
+- **Al desarrollar un cambio de esquema** (nueva columna, tabla, etc.), genera la
+  migración contra una BD de desarrollo y añádela al repo:
+
+  ```bash
+  # con TESEO_CONFIG apuntando a tu BD de desarrollo
+  .venv/bin/alembic revision --autogenerate -m "describe el cambio"
+  # revisa el fichero generado en alembic/versions/ antes de commitearlo
+  ```
+
+- En el servidor, `update.sh` aplica esas migraciones automáticamente. Para ver el
+  estado: `.venv/bin/alembic current` / `.venv/bin/alembic history`.
 
 ---
 
