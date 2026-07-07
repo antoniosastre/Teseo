@@ -14,6 +14,7 @@ def ssh_target_for_host(host: HostOrigen, box: SecretBox) -> SshTarget:
         usuario=host.usuario,
         auth_method=host.auth_method,
         secret=box.decrypt(host.secret_cifrado),
+        host_key=host.host_key,
     )
 
 
@@ -24,6 +25,7 @@ def ssh_target_for_destino(destino: Destino, box: SecretBox) -> SshTarget:
         usuario=destino.usuario,
         auth_method=destino.auth_method,
         secret=box.decrypt(destino.secret_cifrado),
+        host_key=destino.host_key,
     )
 
 

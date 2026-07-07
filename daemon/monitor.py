@@ -39,7 +39,7 @@ def check_origenes(box: SecretBox) -> None:
         hosts = list(session.scalars(select(HostOrigen)))
     for h in hosts:
         target = ssh_target_for_host(h, box)
-        ok, _ = test_connection(target)
+        ok, _, learned = test_connection(target)
         nuevo = "conectado" if ok else "inaccesible"
         with session_scope() as session:
             obj = session.get(HostOrigen, h.id)
@@ -47,6 +47,9 @@ def check_origenes(box: SecretBox) -> None:
                 previo = obj.estado_conexion
                 obj.estado_conexion = nuevo
                 obj.last_check = dt.datetime.now()
+                # Primer uso: fija la clave de host aprendida (pinning).
+                if learned and not obj.host_key:
+                    obj.host_key = learned
         # Avisa solo en la transición a inaccesible (evita spam).
         if not ok and previo != "inaccesible":
             notify_unreachable(h.nombre)
