@@ -13,9 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.11 y 3.12: compatibles con los pines de requirements.
-        # (SQLAlchemy 2.0.30 no funciona aún en 3.14.)
-        python-version: ["3.11", "3.12"]
+        # Cubrimos varias versiones; el servidor de producción corre 3.14
+        # (SQLAlchemy >= 2.0.41 ya lo soporta).
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - name: Checkout

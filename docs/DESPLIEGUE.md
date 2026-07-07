@@ -4,14 +4,14 @@ Guía para poner Teseo en marcha en un servidor Linux con systemd y mantenerlo
 actualizado mediante releases de GitHub.
 
 > Ejemplos con Debian/Ubuntu (`apt`). Adapta el gestor de paquetes a tu distro.
-> **Python 3.11 o 3.12** (los pines actuales de `requirements.txt` aún no soportan 3.14).
+> **Python 3.11 o superior** (probado hasta 3.14; requiere Teseo ≥ v0.1.1).
 
 ---
 
 ## 1. Requisitos
 
 - Servidor Linux con `systemd`, `git`, `rsync` y `ssh`.
-- Python 3.11/3.12 + `venv`.
+- Python 3.11+ + `venv`.
 - MySQL o MariaDB (puede ser en el propio servidor).
 - Acceso SSH desde el servidor a los **hosts origen** y **destinos** (Teseo es el
   controlador; los datos van origen→destino directamente, no pasan por él).
