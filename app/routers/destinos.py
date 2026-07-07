@@ -24,7 +24,7 @@ async def listar(request: Request, _: int = Depends(require_login)):
         destinos = list(session.scalars(select(Destino).order_by(Destino.nombre)))
         rows = []
         for d in destinos:
-            origenes = sorted({t.host_origen.nombre for t in d.tareas})
+            origenes = sorted({t.origen.volumen.host_origen.nombre for t in d.tareas})
             rows.append(
                 {
                     "id": d.id,

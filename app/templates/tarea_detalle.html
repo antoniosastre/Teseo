@@ -2,18 +2,25 @@
 {% block title %}Tarea{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>{{ tarea.host }} · {{ tarea.carpeta_origen }}</h1>
-  <a href="/origenes" class="btn secondary">Volver</a>
+  <h1>{{ tarea.host }} · {{ tarea.origen }} · {{ tarea.tipo }}</h1>
+  <a href="/origenes/origen/{{ tarea.origen_id }}" class="btn secondary">Volver</a>
 </div>
 
 <div class="form-card">
   <div class="grid2">
+    <div><strong>Origen:</strong> {{ tarea.volumen }} · <code>{{ tarea.ruta }}</code></div>
     <div><strong>Destino:</strong> {{ tarea.destino }}</div>
     <div><strong>Tipo:</strong> {{ tarea.tipo }}</div>
     <div><strong>Programación:</strong> <code>{{ tarea.cron }}</code></div>
-    <div><strong>Retención:</strong> {{ tarea.retencion }} snapshots</div>
+    <div><strong>Retención:</strong> {{ tarea.retencion_dias }} días</div>
     <div><strong>Estado:</strong> <span class="badge estado-{{ tarea.estado }}">{{ tarea.estado }}</span></div>
-    <div><strong>Puntuación protección:</strong> <span class="score score-{{ tarea.score_clase }}">{{ tarea.score }}</span> ({{ tarea.score_clase }})</div>
+    <div><strong>Puntuación protección:</strong>
+      <div class="scorebar scorebar-lg" role="img" title="Protección: {{ tarea.score_texto }}"
+           aria-label="Protección: {{ tarea.score_texto }}">
+        <div class="scorebar-fill {{ tarea.score_color }}" style="width: {{ tarea.score_pct }}%"></div>
+      </div>
+      <span class="muted">({{ tarea.score_texto }})</span>
+    </div>
     <div><strong>Última copia:</strong> {{ tarea.last_run_at|datetime_fmt }}</div>
     <div><strong>Siguiente:</strong> {{ tarea.next_run_at|datetime_fmt }}</div>
   </div>

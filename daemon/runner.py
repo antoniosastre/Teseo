@@ -13,10 +13,11 @@ import shlex
 
 from app.crypto import SecretBox
 from app.db import session_scope
-from app.models import Destino, Ejecucion, HostOrigen, Tarea
+from app.models import Destino, Ejecucion, Origen, Tarea
 from app.remote import SshError, SshTarget, connect, run
-from app.rsync_cmd import build_plan, dest_task_dir
+from app.rsync_cmd import build_plan
 from app.services import ssh_target_for_destino, ssh_target_for_host
+from connectors import get_connector
 from daemon.keyprov import ensure_trust
 from daemon.notify import notify_failure
 from daemon.retention import apply_retention, set_current_symlink
@@ -77,7 +78,9 @@ def run_tarea(tarea_id: int, box: SecretBox) -> None:
         tarea = session.get(Tarea, tarea_id)
         if tarea is None:
             return
-        host = session.get(HostOrigen, tarea.host_origen_id)
+        origen = session.get(Origen, tarea.origen_id)
+        volumen = origen.volumen
+        host = volumen.host_origen
         destino = session.get(Destino, tarea.destino_id)
         tarea.estado = "en_progreso"
         tarea.porcentaje = 0
@@ -86,17 +89,22 @@ def run_tarea(tarea_id: int, box: SecretBox) -> None:
         session.add(ejec)
         session.flush()
         ejec_id = ejec.id
+        # El conector define qué ruta copiar y con qué filtros (p. ej. bundle @).
+        conector = get_connector(host.tipo_conector)
+        ruta_origen, filtros = conector.fuente_rsync(origen.tipo, origen.ruta)
         # Copias defensivas de los datos necesarios.
         info = {
             "tipo": tarea.tipo,
-            "carpeta_origen": tarea.carpeta_origen,
+            "ruta_origen": ruta_origen,
+            "filtros": filtros,
             "carpeta_base": destino.carpeta_base,
             "host_nombre": host.nombre,
-            "host_email_ctx": host.nombre,
+            "volumen_nombre": volumen.nombre,
+            "origen_nombre": origen.nombre,
             "destino_usuario": destino.usuario,
             "destino_host": destino.host,
             "destino_puerto": destino.puerto,
-            "retencion": tarea.retencion,
+            "retencion_dias": tarea.retencion_dias,
             "rsync_extra": tarea.rsync_extra,
             "comando_override": tarea.comando_rsync,
             "cron": tarea.cron,
@@ -114,15 +122,18 @@ def run_tarea(tarea_id: int, box: SecretBox) -> None:
 
         # 3) Construir el plan de esta ejecución.
         plan = build_plan(
-            carpeta_origen=info["carpeta_origen"],
+            ruta_origen=info["ruta_origen"],
             carpeta_base=info["carpeta_base"],
             host_nombre=info["host_nombre"],
+            volumen_nombre=info["volumen_nombre"],
+            origen_nombre=info["origen_nombre"],
             tipo=info["tipo"],
             destino_usuario=info["destino_usuario"],
             destino_host=info["destino_host"],
             destino_puerto=info["destino_puerto"],
             key_path=key_path,
             extra_flags=info["rsync_extra"],
+            filtros=info["filtros"],
         )
         snapshot_path = plan.dest_target
 
@@ -145,7 +156,7 @@ def run_tarea(tarea_id: int, box: SecretBox) -> None:
             # 6) Post-proceso para incremental: enlazar current y aplicar retención.
             if info["tipo"] == "incremental" and plan.snapshot_name:
                 set_current_symlink(destino_target, plan.dest_root, plan.snapshot_name)
-                apply_retention(destino_target, plan.dest_root, info["retencion"])
+                apply_retention(destino_target, plan.dest_root, info["retencion_dias"])
     except SshError as exc:
         resultado = "fallo"
         error_msg = str(exc)
@@ -157,7 +168,7 @@ def run_tarea(tarea_id: int, box: SecretBox) -> None:
     _finalize(tarea_id, ejec_id, resultado, error_msg, sent_bytes, snapshot_path, info["cron"])
 
     if resultado == "fallo":
-        notify_failure(info["host_nombre"], info["carpeta_origen"], error_msg or "")
+        notify_failure(info["host_nombre"], info["origen_nombre"], error_msg or "")
 
 
 def _prepare_destino(destino: SshTarget, dest_root: str) -> None:

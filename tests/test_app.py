@@ -2,22 +2,33 @@
 from __future__ import annotations
 
 from app.db import session_scope
-from app.models import Destino, HostOrigen, Tarea
+from app.models import Destino, HostOrigen, Origen, Tarea, Ubicacion, Volumen
 
 
-def _crear_entorno(client):
-    ub_a = client.post("/ubicaciones", data={"nombre": "CPD-A"}).json()["id"]
-    ub_b = client.post("/ubicaciones", data={"nombre": "CPD-B"}).json()["id"]
-    client.post("/destinos", data={
-        "nombre": "nas1", "host": "10.0.0.9", "puerto": 22, "usuario": "bk",
-        "auth_method": "password", "secret": "secreto", "carpeta_base": "/backups",
-        "proteccion": "raid2", "ubicacion_id": str(ub_b)}, follow_redirects=False)
-    client.post("/origenes/host", data={
-        "nombre": "web1", "host": "10.0.0.5", "puerto": 22, "usuario": "root",
-        "auth_method": "password", "secret": "pw", "es_raid": "raid1",
-        "ubicacion_id": str(ub_a)}, follow_redirects=False)
+def _crear_entorno(host_ubic="CPD-A", destino_ubic="CPD-B", vol_raid="raid1", dest_raid="raid2"):
+    """Crea host→volumen→origen + destino directamente en BD. Devuelve (origen_id, destino_id)."""
     with session_scope() as s:
-        return s.query(HostOrigen).first().id, s.query(Destino).first().id
+        ua = Ubicacion(nombre=host_ubic)
+        ub = Ubicacion(nombre=destino_ubic)
+        s.add_all([ua, ub])
+        s.flush()
+        host = HostOrigen(nombre="web1", tipo_conector="synology", host="10.0.0.5",
+                          usuario="root", auth_method="password", secret_cifrado="x",
+                          ubicacion_id=ua.id, estado_conexion="conectado")
+        s.add(host)
+        s.flush()
+        vol = Volumen(host_origen_id=host.id, nombre="volume1", proteccion=vol_raid)
+        s.add(vol)
+        s.flush()
+        origen = Origen(volumen_id=vol.id, nombre="web", tipo="carpeta", ruta="/volume1/web")
+        s.add(origen)
+        s.flush()
+        destino = Destino(nombre="nas1", host="10.0.0.9", usuario="bk", auth_method="password",
+                          secret_cifrado="y", carpeta_base="/backups", proteccion=dest_raid,
+                          ubicacion_id=ub.id)
+        s.add(destino)
+        s.flush()
+        return origen.id, destino.id
 
 
 def test_login_required(client):
@@ -30,52 +41,65 @@ def test_login_invalido(client):
     assert r.status_code == 200 and "incorrect" in r.text.lower()
 
 
-def test_secreto_se_cifra(auth_client):
-    _crear_entorno(auth_client)
+def test_destino_cifra_secreto(auth_client):
+    auth_client.post("/destinos", data={
+        "nombre": "nas1", "host": "10.0.0.9", "puerto": 22, "usuario": "bk",
+        "auth_method": "password", "secret": "supersecreto", "carpeta_base": "/backups",
+        "proteccion": "raid2"}, follow_redirects=False)
     with session_scope() as s:
-        h = s.query(HostOrigen).first()
-        assert h.secret_cifrado and h.secret_cifrado != "pw"
-
-
-def test_preview_comando(auth_client):
-    hid, did = _crear_entorno(auth_client)
-    r = auth_client.post("/origenes/preview", data={
-        "host_id": hid, "destino_id": did, "carpeta_origen": "/var/www",
-        "tipo": "incremental", "rsync_extra": "--exclude=*.tmp"})
-    cmd = r.json()["command"]
-    assert cmd.startswith("rsync") and "--link-dest=../current" in cmd and "--exclude=*.tmp" in cmd
+        d = s.query(Destino).first()
+        assert d.secret_cifrado and d.secret_cifrado != "supersecreto"
 
 
 def test_crear_tarea_y_cron_invalido(auth_client):
-    hid, did = _crear_entorno(auth_client)
-    ok = auth_client.post("/origenes", data={
-        "host_id": hid, "destino_id": did, "carpeta_origen": "/var/www",
-        "tipo": "incremental", "cron": "0 2 * * *", "retencion": 5}, follow_redirects=False)
-    assert ok.status_code == 303
-    bad = auth_client.post("/origenes", data={
-        "host_id": hid, "destino_id": did, "carpeta_origen": "/srv",
-        "tipo": "espejo", "cron": "no-valido", "retencion": 3}, follow_redirects=False)
-    assert bad.status_code == 200 and "cron" in bad.text.lower()
+    oid, did = _crear_entorno()
+    ok = auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "incremental", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    assert ok.status_code == 303 and "error" not in ok.headers["location"]
+    bad = auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "no-valido", "retencion_dias": 3},
+        follow_redirects=False)
+    assert bad.status_code == 303 and "cron-invalido" in bad.headers["location"]
 
 
-def test_scoring(auth_client):
-    hid, did = _crear_entorno(auth_client)
-    auth_client.post("/origenes", data={
-        "host_id": hid, "destino_id": did, "carpeta_origen": "/var/www",
-        "tipo": "incremental", "cron": "0 2 * * *", "retencion": 5}, follow_redirects=False)
-    from app.services import tarea_score
+def test_override_rsync_invalido_se_rechaza(auth_client):
+    oid, did = _crear_entorno()
+    bad = auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 3,
+        "comando_rsync": "rsync -a /a/ u@h:/b/; rm -rf /"}, follow_redirects=False)
+    assert "override-invalido" in bad.headers["location"]
+
+
+def test_scoring_por_origen(auth_client):
+    oid, did = _crear_entorno(vol_raid="raid1", dest_raid="raid2")
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "incremental", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    from app.services import origen_score_bar
     with session_scope() as s:
-        t = s.query(Tarea).first()
-        pts, clase = tarea_score(t)
-    # raid1 (1) + raid2 (2) + ubicaciones distintas (2) = 5 -> excelente
-    assert pts == 5 and clase == "excelente"
+        o = s.get(Origen, oid)
+        sb = origen_score_bar(o)
+    # raid1 volumen (1) + tiene copia (1) + raid2 destino (2) + ubicación distinta (1) = 5
+    assert sb.puntos == 5 and sb.texto == "excelente"
+    assert sb.color == "azul" and sb.pct == 90
+
+
+def test_origenes_renderiza_jerarquia_y_barra(auth_client):
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    html = auth_client.get("/origenes").text
+    assert "web1" in html and "volume1" in html            # jerarquía host→volumen
+    assert "scorebar-fill azul" in html and "width: 90%" in html
 
 
 def test_run_now_y_estado(auth_client):
-    hid, did = _crear_entorno(auth_client)
-    auth_client.post("/origenes", data={
-        "host_id": hid, "destino_id": did, "carpeta_origen": "/var/www",
-        "tipo": "espejo", "cron": "0 2 * * *", "retencion": 5}, follow_redirects=False)
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
     with session_scope() as s:
         tid = s.query(Tarea).first().id
     r = auth_client.post(f"/tareas/{tid}/run", follow_redirects=False)
@@ -84,3 +108,45 @@ def test_run_now_y_estado(auth_client):
         assert s.query(Tarea).first().run_now is True
     j = auth_client.get("/estado/json").json()
     assert str(tid) in j["tareas"]
+
+
+def test_pantallas_wizard_y_detalle_renderizan(auth_client):
+    oid, did = _crear_entorno()
+    with session_scope() as s:
+        host_id = s.query(HostOrigen).first().id
+    # Todas deben renderizar sin errores de plantilla (200).
+    assert auth_client.get("/origenes/host/nuevo").status_code == 200
+    assert auth_client.get(f"/origenes/host/{host_id}/configurar").status_code == 200
+    assert auth_client.get(f"/origenes/origen/{oid}").status_code == 200
+
+
+def test_persistir_descubrimiento_crea_y_marca_huerfanos(client):
+    """El descubrimiento crea orígenes; los que desaparecen se marcan (no se borran)."""
+    from app.services import persistir_descubrimiento
+    from connectors import OrigenDescubierto, VolumenDescubierto
+
+    with session_scope() as s:
+        host = HostOrigen(nombre="nas", tipo_conector="synology", host="h",
+                          usuario="u", auth_method="password", secret_cifrado="x")
+        s.add(host)
+        s.flush()
+        # Primer descubrimiento: volume1 con "Configuración" y "web".
+        persistir_descubrimiento(s, host, [
+            VolumenDescubierto("volume1", [
+                OrigenDescubierto("Configuración", "config", "/volume1"),
+                OrigenDescubierto("web", "carpeta", "/volume1/web"),
+            ])
+        ])
+        s.flush()
+        assert {o.nombre for v in host.volumenes for o in v.origenes} == {"Configuración", "web"}
+
+        # Segundo descubrimiento: "web" ha desaparecido.
+        persistir_descubrimiento(s, host, [
+            VolumenDescubierto("volume1", [
+                OrigenDescubierto("Configuración", "config", "/volume1"),
+            ])
+        ])
+        s.flush()
+        estados = {o.ruta: o.estado for v in host.volumenes for o in v.origenes}
+        assert estados["/volume1/web"] == "desaparecido"   # marcado, no borrado
+        assert estados["/volume1"] == "activo"

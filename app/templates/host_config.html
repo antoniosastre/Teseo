@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Configurar host{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Configurar host: {{ host.nombre }} (2/2)</h1></div>
+<p class="muted">Exploración completada. Indica la protección de cada volumen y la ubicación física del host.</p>
+
+<form method="post" action="/origenes/host/{{ host.id }}/configurar" class="form-card">
+  <fieldset>
+    <legend>Protección por volumen</legend>
+    {% for v in volumenes %}
+    <div class="grid2 vol-row">
+      <span>📦 <strong>{{ v.nombre }}</strong> <span class="muted">({{ v.n_origenes }} orígenes)</span></span>
+      <label>
+        <select name="proteccion_{{ v.id }}">
+          {% for p in protecciones %}
+          <option value="{{ p }}" {{ 'selected' if v.proteccion==p }}>
+            {{ {'single':'Sin protección','raid1':'RAID (1 disco)','raid2':'RAID (2 discos)'}[p] }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    {% else %}
+    <p class="muted">No se descubrió ningún volumen.</p>
+    {% endfor %}
+  </fieldset>
+
+  <fieldset>
+    <legend>Ubicación física del host</legend>
+    <label>
+      <select name="ubicacion_id">
+        <option value="">— sin especificar —</option>
+        {% for u in ubicaciones %}
+        <option value="{{ u.id }}" {{ 'selected' if host.ubicacion_id==u.id }}>{{ u.nombre }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <small class="muted">Las ubicaciones se gestionan en Ajustes.</small>
+  </fieldset>
+
+  <button type="submit" class="primary">Añadir host de origen</button>
+</form>
+<form method="post" action="/origenes/host/{{ host.id }}/eliminar"
+      onsubmit="return confirm('¿Cancelar y descartar este host?')">
+  <button class="link danger">Cancelar y descartar</button>
+</form>
+{% endblock %}

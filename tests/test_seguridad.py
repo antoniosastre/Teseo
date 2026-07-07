@@ -14,9 +14,9 @@ from app.rsync_cmd import build_plan, validate_override
 def test_rsync_extra_se_cita_y_neutraliza_inyeccion():
     """Un rsync_extra malicioso queda citado como un único token inerte."""
     p = build_plan(
-        carpeta_origen="/data", carpeta_base="/bk", host_nombre="h", tipo="espejo",
-        destino_usuario="u", destino_host="nas", key_path="/k",
-        extra_flags="--rsh=$(reboot)",
+        ruta_origen="/data", carpeta_base="/bk", host_nombre="h", volumen_nombre="volume1",
+        origen_nombre="web", tipo="espejo", destino_usuario="u", destino_host="nas",
+        key_path="/k", extra_flags="--rsh=$(reboot)",
     )
     # La subshell no debe quedar 'desnuda' en el comando: va entre comillas.
     assert "$(reboot)" not in p.command.replace("'--rsh=$(reboot)'", "")
@@ -38,27 +38,8 @@ def test_validate_override_rechaza_no_rsync_y_metacaracteres():
     assert validate_override("rsync -a /a/ > /etc/passwd") is not None
 
 
-def test_override_rechazado_en_alta_de_tarea(auth_client):
-    from app.db import session_scope
-    from app.models import Destino, HostOrigen
-
-    auth_client.post("/destinos", data={
-        "nombre": "nas1", "host": "10.0.0.9", "puerto": 22, "usuario": "bk",
-        "auth_method": "password", "secret": "s", "carpeta_base": "/backups",
-        "proteccion": "raid2"}, follow_redirects=False)
-    auth_client.post("/origenes/host", data={
-        "nombre": "web1", "host": "10.0.0.5", "puerto": 22, "usuario": "root",
-        "auth_method": "password", "secret": "pw", "es_raid": "raid1"},
-        follow_redirects=False)
-    with session_scope() as s:
-        hid = s.query(HostOrigen).first().id
-        did = s.query(Destino).first().id
-
-    bad = auth_client.post("/origenes", data={
-        "host_id": hid, "destino_id": did, "carpeta_origen": "/var/www",
-        "tipo": "espejo", "cron": "0 2 * * *", "retencion": 3,
-        "comando_rsync": "rsync -a /a/ u@h:/b/; rm -rf /"}, follow_redirects=False)
-    assert bad.status_code == 200 and "rsync" in bad.text.lower()
+# (El rechazo del override en el alta de tarea se cubre en test_app.py con el
+#  endpoint nuevo /origenes/origen/{id}/tarea tras el rediseño.)
 
 
 # --- #2 Pinning de clave de host SSH -----------------------------------------

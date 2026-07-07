@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Origen {{ origen.nombre }}{% endblock %}
+{% set err_label = {'cron-invalido':'La expresión cron no es válida.','override-invalido':'El comando rsync personalizado no es válido (debe empezar por rsync, sin metacaracteres).','tarea-duplicada':'Ya existe una tarea de ese tipo hacia ese destino.','origen-o-destino-invalido':'Origen o destino inválido.'} %}
+{% block content %}
+<div class="page-head">
+  <h1>📁 {{ origen.nombre }}</h1>
+  <a href="/origenes" class="btn secondary">Volver</a>
+</div>
+<p class="muted">{{ origen.host }} · {{ origen.volumen }} · <code>{{ origen.ruta }}</code>
+  · {{ origen.tamano_bytes|human_bytes if origen.tamano_bytes is not none else 'tamaño desconocido' }}</p>
+<div class="scorebar scorebar-lg" role="img" title="Protección: {{ origen.score_texto }}" aria-label="Protección: {{ origen.score_texto }}">
+  <div class="scorebar-fill {{ origen.score_color }}" style="width: {{ origen.score_pct }}%"></div>
+</div>
+
+{% if error %}<div class="alert error">{{ err_label.get(error, error) }}</div>{% endif %}
+
+<h2>Tareas de copia</h2>
+{% if origen.tareas %}
+<table class="data">
+  <thead><tr><th>Tipo</th><th>Destino</th><th>Programación</th><th>Retención</th><th>Estado</th><th>Última</th><th>Siguiente</th><th></th></tr></thead>
+  <tbody>
+  {% for t in origen.tareas %}
+    <tr>
+      <td><a href="/tareas/{{ t.id }}">{{ t.tipo }}</a></td>
+      <td>{{ t.destino }}</td>
+      <td><code>{{ t.cron }}</code></td>
+      <td>{{ t.retencion_dias }} días</td>
+      <td><span class="badge estado-{{ t.estado }}" data-tarea-estado="{{ t.id }}">{{ t.estado }}</span></td>
+      <td>{{ t.last_run_at|datetime_fmt }}</td>
+      <td>{{ t.next_run_at|datetime_fmt }}</td>
+      <td>
+        <form method="post" action="/tareas/{{ t.id }}/run" class="inline"><button class="link">Ejecutar ya</button></form>
+        <form method="post" action="/tareas/{{ t.id }}/eliminar" class="inline"
+              onsubmit="return confirm('¿Eliminar tarea?')"><button class="link danger">×</button></form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Este origen todavía no tiene tareas de copia.</p>
+{% endif %}
+
+<h2>Nueva tarea</h2>
+<form method="post" action="/origenes/origen/{{ origen.id }}/tarea" class="form-card">
+  <div class="grid2">
+    <label>Destino
+      <select name="destino_id" required>
+        {% for d in destinos %}<option value="{{ d.id }}">{{ d.nombre }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Tipo de copia
+      <select name="tipo">
+        {% for t in tipos %}<option value="{{ t }}">{{ {'espejo':'Espejo (--delete)','incremental':'Incremental (snapshots --link-dest)'}[t] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Programación (cron)
+      <input name="cron" value="0 2 * * *" required>
+      <small class="muted">Ej.: <code>0 2 * * *</code> = cada día a las 02:00</small>
+    </label>
+    <label>Retención (días)
+      <input name="retencion_dias" type="number" min="1" value="7">
+    </label>
+  </div>
+  <details class="advanced">
+    <summary>Opciones avanzadas</summary>
+    <label>Flags rsync extra
+      <input name="rsync_extra" placeholder="--exclude='*.tmp'">
+    </label>
+    <label>Comando rsync (vacío = generado automáticamente)
+      <textarea name="comando_rsync" rows="2" placeholder="Debe empezar por rsync"></textarea>
+    </label>
+  </details>
+  {% if not destinos %}
+  <div class="alert error">Primero añade un <a href="/destinos/nuevo">destino</a>.</div>
+  {% else %}
+  <button type="submit" class="primary">Crear tarea</button>
+  {% endif %}
+</form>
+{% endblock %}
