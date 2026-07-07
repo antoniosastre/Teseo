@@ -21,3 +21,6 @@ class PleskConnector:
 
     def fuente_rsync(self, tipo_origen: str, ruta: str) -> tuple[str, list[str]]:
         return ruta, []
+
+    def medir_tamano(self, ejecutar: Ejecutar, tipo_origen: str, ruta: str) -> int | None:
+        return None  # el stub no mide tamaños todavía

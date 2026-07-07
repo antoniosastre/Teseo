@@ -91,3 +91,14 @@ class SynologyConnector:
             # Copiar solo lo que empieza por "@" en la raíz del volumen.
             return ruta, ["--include=@*", "--include=@*/**", "--exclude=*"]
         return ruta, []
+
+    def medir_tamano(self, ejecutar, tipo_origen: str, ruta: str) -> int | None:
+        q = shlex.quote(ruta)
+        if tipo_origen == "config":
+            # Suma del tamaño de todo lo que empieza por "@" en la raíz del volumen.
+            cmd = f"du -scb {q}/@* 2>/dev/null | tail -1 | cut -f1"
+        else:
+            cmd = f"du -sb {q} 2>/dev/null | cut -f1"
+        rc, out, _ = ejecutar(cmd)
+        out = out.strip()
+        return int(out) if rc == 0 and out.isdigit() else None

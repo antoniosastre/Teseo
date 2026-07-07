@@ -57,3 +57,17 @@ def notify_unreachable(host_nombre: str) -> None:
         subject=f"Origen inaccesible: {host_nombre}",
         body=f"El host origen {host_nombre} no responde por SSH.\n",
     )
+
+
+def notify_orphan(host_nombre: str, origen_nombre: str) -> None:
+    send_email(
+        subject=f"Origen desaparecido: {host_nombre}:{origen_nombre}",
+        body=(
+            f"El origen '{origen_nombre}' del host '{host_nombre}' ha DESAPARECIDO "
+            "en la última exploración, pero tenía tareas de copia configuradas "
+            "(ahora huérfanas).\n\n"
+            "Esto puede significar que se ha eliminado o renombrado un origen de "
+            "datos. Revísalo: si es intencionado, elimina sus tareas; si no, "
+            "restaura el origen. Teseo NO ha borrado nada automáticamente.\n"
+        ),
+    )

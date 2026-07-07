@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Ajustes{% endblock %}
+{% set aviso_label = {'intervalo-guardado':'Intervalo guardado.','analisis-encolado':'Análisis encolado: el daemon lo ejecutará en breve.','ubicacion-en-uso':'No se puede eliminar: la ubicación está en uso.'} %}
+{% block content %}
+<div class="page-head"><h1>Ajustes</h1></div>
+{% if aviso %}<div class="alert ok">{{ aviso_label.get(aviso, aviso) }}</div>{% endif %}
+
+<h2>Analizador</h2>
+<div class="form-card">
+  <p class="muted">El analizador refresca el tamaño de los orígenes (con histórico) y
+  re-explora los hosts para detectar orígenes nuevos o desaparecidos (tareas huérfanas).</p>
+  <form method="post" action="/ajustes/analizador" class="inline-add">
+    <label>Intervalo (horas)
+      <input name="intervalo_horas" type="number" min="1" value="{{ intervalo }}">
+    </label>
+    <button type="submit" class="primary">Guardar</button>
+  </form>
+  <form method="post" action="/ajustes/analizar" style="margin-top:1rem">
+    <button type="submit" class="secondary">Ejecutar análisis ahora</button>
+  </form>
+</div>
+
+<h2>Ubicaciones físicas</h2>
+<div class="form-card">
+  <table class="data">
+    <thead><tr><th>Nombre</th><th></th></tr></thead>
+    <tbody>
+    {% for u in ubicaciones %}
+      <tr>
+        <td>{{ u.nombre }}</td>
+        <td>
+          {% if u.en_uso %}
+            <span class="muted small">en uso</span>
+          {% else %}
+            <form method="post" action="/ajustes/ubicaciones/{{ u.id }}/eliminar" class="inline"
+                  onsubmit="return confirm('¿Eliminar ubicación {{ u.nombre }}?')">
+              <button class="link danger">Eliminar</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="2" class="muted">Sin ubicaciones.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/ajustes/ubicaciones" class="inline-add" style="margin-top:1rem">
+    <input name="nombre" placeholder="Nueva ubicación física" required>
+    <button type="submit" class="primary">Añadir</button>
+  </form>
+</div>
+{% endblock %}
