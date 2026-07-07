@@ -52,7 +52,12 @@
               </td>
               <td>{{ t.last_run_at|datetime_fmt }}</td>
               <td>{{ t.next_run_at|datetime_fmt }}</td>
-              <td><span class="score score-{{ t.score_clase }}" title="{{ t.score_clase }}">{{ t.score }}</span></td>
+              <td>
+                <div class="scorebar" role="img" title="Protección: {{ t.score_texto }}"
+                     aria-label="Protección: {{ t.score_texto }}">
+                  <div class="scorebar-fill {{ t.score_color }}" style="width: {{ t.score_pct }}%"></div>
+                </div>
+              </td>
               <td>
                 <form method="post" action="/tareas/{{ t.id }}/run" class="inline"><button class="link">Ejecutar ya</button></form>
                 <form method="post" action="/tareas/{{ t.id }}/eliminar" class="inline"

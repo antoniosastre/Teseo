@@ -63,7 +63,7 @@ de dominio como `tarea`, `destino`, `origen`, `ubicacion`).
 | "Incremental" | **Snapshots con histórico** vía `rsync --link-dest` (estilo Time Machine) |
 | Retención | Configurable por tarea (nº de snapshots) |
 | Avisos | **Email SMTP** ante fallo de copia u origen inaccesible |
-| Puntuación de protección | Módulo aislado `scoring/` con **fórmula PROVISIONAL** (pendiente la definitiva del usuario) |
+| Puntuación de protección | Módulo aislado `scoring/` con **fórmula DEFINITIVA** (usuario, 070726). Máx. 6: RAID origen (raid1+1/raid2+2) + tiene copia (+1) + RAID destino (raid1+1/raid2+2) + ubicación distinta (+1). UI: barra gráfica no numérica (0 rojo 10% … 6 azul 100%) |
 
 Web y daemon **no se comunican directamente**: coordinan a través de la BD (la web marca
 `run_now`/programación; el daemon toma las tareas vencidas).
@@ -172,11 +172,12 @@ pytest -q          # 14 tests, SQLite en memoria
 
 ## 8. Trabajo pendiente / próximos pasos
 
-1. **Fórmula definitiva de la puntuación de protección** (lo único explícitamente
-   pendiente). Editar SOLO `scoring/__init__.py` (`score()` y `classify()`); el resto de
-   la app la consume vía `app/services.py:tarea_score()`. Criterio provisional actual:
-   RAID origen (raid1=+1, raid2=+2) + RAID destino (igual) + ubicación física distinta (+2);
-   clasificación mínima/básica/buena/excelente. MAX_SCORE=6.
+1. ~~Fórmula definitiva de la puntuación de protección~~ **CERRADO (070726).** Definida en
+   `scoring/__init__.py`: `score()`/`score_bar()`; la consume `app/services.py:tarea_score()`
+   (que devuelve un `ScoreBar`). Fórmula (máx. 6): RAID origen (raid1+1/raid2+2) + tiene
+   copia (+1) + RAID destino (raid1+1/raid2+2) + ubicación física distinta (+1). La UI la
+   pinta como barra gráfica no numérica (0 rojo 10% → 6 azul 100%). Para reajustar el
+   criterio, editar SOLO ese módulo.
 2. Posibles mejoras no pedidas aún: gestión de múltiples admins desde la UI, edición de
    destinos/hosts/tareas existentes (hoy hay alta y borrado, no edición), paginación del
    historial, CI con pytest, cancelación de copias en curso, throttling de `du` en

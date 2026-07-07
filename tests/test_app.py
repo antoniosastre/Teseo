@@ -66,9 +66,23 @@ def test_scoring(auth_client):
     from app.services import tarea_score
     with session_scope() as s:
         t = s.query(Tarea).first()
-        pts, clase = tarea_score(t)
-    # raid1 (1) + raid2 (2) + ubicaciones distintas (2) = 5 -> excelente
-    assert pts == 5 and clase == "excelente"
+        sb = tarea_score(t)
+    # raid1 origen (1) + copia (1) + raid2 destino (2) + ubicaciones distintas (1) = 5
+    assert sb.puntos == 5 and sb.texto == "excelente"
+    assert sb.color == "azul" and sb.pct == 90
+
+
+def test_origenes_renderiza_barra_de_proteccion(auth_client):
+    hid, did = _crear_entorno(auth_client)
+    auth_client.post("/origenes", data={
+        "host_id": hid, "destino_id": did, "carpeta_origen": "/var/www",
+        "tipo": "incremental", "cron": "0 2 * * *", "retencion": 5}, follow_redirects=False)
+    html = auth_client.get("/origenes").text
+    # Barra gráfica (no numérica): raid1+copia+raid2+ubicación distinta = 5 -> azul 90%
+    assert "scorebar-fill azul" in html
+    assert "width: 90%" in html
+    # No se muestra la puntuación como número suelto.
+    assert 'class="score ' not in html
 
 
 def test_run_now_y_estado(auth_client):

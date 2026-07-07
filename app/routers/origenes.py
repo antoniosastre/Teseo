@@ -24,7 +24,7 @@ async def listar(request: Request, _: int = Depends(require_login)):
         for h in hosts:
             tareas = []
             for t in h.tareas:
-                pts, clase = tarea_score(t)
+                sb = tarea_score(t)
                 tareas.append(
                     {
                         "id": t.id,
@@ -36,8 +36,9 @@ async def listar(request: Request, _: int = Depends(require_login)):
                         "last_run_at": t.last_run_at,
                         "next_run_at": t.next_run_at,
                         "activa": t.activa,
-                        "score": pts,
-                        "score_clase": clase,
+                        "score_pct": sb.pct,
+                        "score_color": sb.color,
+                        "score_texto": sb.texto,
                     }
                 )
             rows.append(

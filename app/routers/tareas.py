@@ -48,7 +48,7 @@ async def detalle(tarea_id: int, request: Request, _: int = Depends(require_logi
         t = session.get(Tarea, tarea_id)
         if not t:
             return RedirectResponse("/origenes", status_code=303)
-        pts, clase = tarea_score(t)
+        sb = tarea_score(t)
         ejecuciones = [
             {
                 "inicio": e.inicio, "fin": e.fin, "resultado": e.resultado,
@@ -73,8 +73,9 @@ async def detalle(tarea_id: int, request: Request, _: int = Depends(require_logi
             "rsync_extra": t.rsync_extra,
             "last_run_at": t.last_run_at,
             "next_run_at": t.next_run_at,
-            "score": pts,
-            "score_clase": clase,
+            "score_pct": sb.pct,
+            "score_color": sb.color,
+            "score_texto": sb.texto,
         }
     return templates.TemplateResponse(
         "tarea_detalle.html",

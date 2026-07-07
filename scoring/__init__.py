@@ -1,19 +1,25 @@
-"""Puntuación del nivel de protección de los datos de una tarea.
+"""Puntuación del nivel de protección de los datos de una tarea de copia.
 
-NOTA: la fórmula definitiva la definirá el usuario. Este módulo es un
-**placeholder** documentado y aislado: basta con cambiar ``score()`` y
-``classify()`` para ajustar el criterio sin tocar el resto de la aplicación.
+El scoring valora lo bien o mal protegidos que están los datos de un origen,
+dada una tarea de copia concreta hacia un destino. Módulo aislado: el resto de
+la aplicación lo consume vía ``app/services.py:tarea_score()``.
 
-Criterio provisional (suma de puntos):
-  - Origen con RAID:                 raid1 -> +1, raid2 -> +2
-  - Destino con RAID:                raid1 -> +1, raid2 -> +2
-  - Ubicación física distinta:       +2  (regla 3-2-1: copia fuera de sede)
+Fórmula (suma de puntos, base 0; máximo 6):
+  - Redundancia en el origen (mutuamente excluyentes):
+      raid1 -> +1, raid2 -> +2
+  - El origen tiene copia de seguridad:                +1
+  - Redundancia en el destino (mutuamente excluyentes):
+      raid1 -> +1, raid2 -> +2
+  - Ubicación física del destino distinta a la del origen:  +1
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Puntos por redundancia RAID (aplicable a origen y a destino por separado).
 RAID_POINTS = {"single": 0, "raid1": 1, "raid2": 2}
+
+MAX_SCORE = 6  # raid2 origen (2) + copia (1) + raid2 destino (2) + ubicación distinta (1)
 
 
 @dataclass
@@ -22,23 +28,31 @@ class ScoreInputs:
     destino_proteccion: str
     origen_ubicacion_id: int | None
     destino_ubicacion_id: int | None
+    tiene_copia: bool = True  # una tarea ES una copia de seguridad -> normalmente True
 
 
 def score(inp: ScoreInputs) -> int:
+    """Puntuación total de protección (0..MAX_SCORE)."""
     pts = 0
+    # Redundancia en el origen.
     pts += RAID_POINTS.get(inp.origen_proteccion, 0)
+    # El origen tiene copia de seguridad.
+    if inp.tiene_copia:
+        pts += 1
+    # Redundancia en el destino.
     pts += RAID_POINTS.get(inp.destino_proteccion, 0)
+    # Ubicación física del destino distinta a la del origen.
     if (
         inp.origen_ubicacion_id is not None
         and inp.destino_ubicacion_id is not None
         and inp.origen_ubicacion_id != inp.destino_ubicacion_id
     ):
-        pts += 2
+        pts += 1
     return pts
 
 
 def classify(points: int) -> str:
-    """Etiqueta cualitativa a partir de la puntuación."""
+    """Etiqueta cualitativa a partir de la puntuación (para tooltip/aria)."""
     if points >= 5:
         return "excelente"
     if points >= 3:
@@ -48,4 +62,30 @@ def classify(points: int) -> str:
     return "mínima"
 
 
-MAX_SCORE = 6  # raid2 origen (2) + raid2 destino (2) + ubicación distinta (2)
+@dataclass
+class ScoreBar:
+    """Representación gráfica de la puntuación para la barra de la UI."""
+
+    puntos: int
+    pct: int      # llenado de la barra (10..100)
+    color: str    # token de color: rojo|naranja|amarillo|verde|azul
+    texto: str    # etiqueta cualitativa (mínima/básica/buena/excelente)
+
+
+# Mapeo puntuación -> (llenado %, color) definido por el usuario.
+_BAR = {
+    0: (10, "rojo"),
+    1: (20, "naranja"),
+    2: (40, "amarillo"),
+    3: (60, "verde"),
+    4: (80, "verde"),
+    5: (90, "azul"),
+    6: (100, "azul"),
+}
+
+
+def score_bar(points: int) -> ScoreBar:
+    """Traduce una puntuación a los parámetros gráficos de la barra."""
+    points = max(0, min(MAX_SCORE, points))
+    pct, color = _BAR[points]
+    return ScoreBar(puntos=points, pct=pct, color=color, texto=classify(points))

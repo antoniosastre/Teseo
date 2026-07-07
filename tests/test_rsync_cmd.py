@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from app.crypto import SecretBox, generate_key
 from app.rsync_cmd import build_plan, dest_task_dir, sanitize_component
-from scoring import ScoreInputs, classify, score
+from scoring import MAX_SCORE, ScoreInputs, classify, score, score_bar
 
 
 def test_sanitize_component():
@@ -38,11 +38,39 @@ def test_transporte_ssh_con_puerto_y_clave():
     assert "-p 2222" in p.command and "-i /home/u/.ssh/k" in p.command
 
 
-def test_scoring_niveles():
-    assert score(ScoreInputs("raid2", "raid2", 1, 2)) == 6
-    assert score(ScoreInputs("single", "single", 1, 1)) == 0
+def test_scoring_maximo_son_6_puntos():
+    # raid2 origen (2) + copia (1) + raid2 destino (2) + ubicación distinta (1) = 6
+    assert score(ScoreInputs("raid2", "raid2", 1, 2)) == 6 == MAX_SCORE
+
+
+def test_scoring_componentes():
+    # single/single, misma ubicación, con copia -> solo el +1 de "tiene copia".
+    assert score(ScoreInputs("single", "single", 1, 1)) == 1
+    # sin copia de seguridad -> 0.
+    assert score(ScoreInputs("single", "single", 1, 1, tiene_copia=False)) == 0
+    # raid1 origen (1) + copia (1) + destino single (0) + ubicación distinta (1) = 3
     assert score(ScoreInputs("raid1", "single", 1, 2)) == 3
-    assert classify(0) == "mínima" and classify(6) == "excelente"
+    # ubicación desconocida (None) no puntúa aunque difieran conceptualmente.
+    assert score(ScoreInputs("single", "single", None, 2)) == 1
+
+
+def test_classify_labels():
+    assert classify(0) == "mínima"
+    assert classify(2) == "básica"
+    assert classify(4) == "buena"
+    assert classify(6) == "excelente"
+
+
+def test_score_bar_mapeo_usuario():
+    esperado = {
+        0: (10, "rojo"), 1: (20, "naranja"), 2: (40, "amarillo"),
+        3: (60, "verde"), 4: (80, "verde"), 5: (90, "azul"), 6: (100, "azul"),
+    }
+    for pts, (pct, color) in esperado.items():
+        bar = score_bar(pts)
+        assert bar.pct == pct and bar.color == color and bar.puntos == pts
+    # Fuera de rango se recorta a [0, MAX_SCORE].
+    assert score_bar(99).pct == 100 and score_bar(-3).pct == 10
 
 
 def test_cifrado_roundtrip():

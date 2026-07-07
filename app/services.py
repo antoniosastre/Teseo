@@ -4,7 +4,7 @@ from __future__ import annotations
 from app.crypto import SecretBox
 from app.models import Destino, HostOrigen, Tarea
 from app.remote import SshTarget
-from scoring import ScoreInputs, classify, score
+from scoring import ScoreBar, ScoreInputs, score, score_bar
 
 
 def ssh_target_for_host(host: HostOrigen, box: SecretBox) -> SshTarget:
@@ -50,8 +50,12 @@ def host_semaforo(host: HostOrigen) -> str:
     return "gris"
 
 
-def tarea_score(tarea: Tarea) -> tuple[int, str]:
-    """Devuelve (puntos, clasificación) de la protección de una tarea."""
+def tarea_score(tarea: Tarea) -> ScoreBar:
+    """Devuelve la barra de protección (puntos, %, color, texto) de una tarea.
+
+    Una tarea es, por definición, una copia de seguridad del origen, de modo que
+    el criterio "el origen tiene copia de seguridad" (+1) siempre se cumple aquí.
+    """
     host = tarea.host_origen
     destino = tarea.destino
     pts = score(
@@ -60,6 +64,7 @@ def tarea_score(tarea: Tarea) -> tuple[int, str]:
             destino_proteccion=destino.proteccion,
             origen_ubicacion_id=host.ubicacion_id,
             destino_ubicacion_id=destino.ubicacion_id,
+            tiene_copia=True,
         )
     )
-    return pts, classify(pts)
+    return score_bar(pts)
