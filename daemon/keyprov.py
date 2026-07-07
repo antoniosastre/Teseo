@@ -14,7 +14,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app.crypto import SecretBox
 from app.db import session_scope
-from app.models import Destino, HostOrigen, SshKeypair, Tarea
+from app.models import Destino, Origen, SshKeypair, Tarea
 from app.remote import SshError, SshTarget, connect, run
 from app.services import ssh_target_for_destino, ssh_target_for_host
 
@@ -93,7 +93,7 @@ def ensure_trust(tarea_id: int, box: SecretBox) -> str:
         tarea = session.get(Tarea, tarea_id)
         if tarea is None:
             raise SshError("Tarea inexistente")
-        host = session.get(HostOrigen, tarea.host_origen_id)
+        host = session.get(Origen, tarea.origen_id).volumen.host_origen
         destino = session.get(Destino, tarea.destino_id)
         origin_target = ssh_target_for_host(host, box)
         destino_target = ssh_target_for_destino(destino, box)

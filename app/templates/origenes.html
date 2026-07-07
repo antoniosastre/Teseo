@@ -1,80 +1,67 @@
 {% extends "base.html" %}
 {% block title %}Orígenes{% endblock %}
+{% set copia_label = {'correcta':'Correcta','sin_copia':'Sin copia','en_proceso':'En proceso','error':'Error','pendiente':'Pendiente'} %}
 {% block content %}
 <div class="page-head">
   <h1>Orígenes</h1>
   <div class="actions">
-    <a href="/origenes/host/nuevo" class="btn secondary">+ Añadir host</a>
-    <a href="/origenes/nuevo" class="btn primary">+ Añadir origen</a>
+    <a href="/origenes/host/nuevo" class="btn primary">+ Añadir host</a>
   </div>
 </div>
 
-<table class="data expandable">
-  <thead>
-    <tr><th></th><th>Estado</th><th>Host</th><th>Dirección</th><th>Protección</th><th>Ubicación</th><th>Tareas</th><th></th></tr>
-  </thead>
-  <tbody>
-  {% for h in hosts %}
-    <tr class="row-main" data-target="host-{{ h.id }}">
-      <td><button class="expander" aria-label="Desplegar">▶</button></td>
-      <td><span class="semaforo s-{{ h.semaforo }}" data-host="{{ h.id }}" title="{{ h.estado_conexion }}"></span></td>
-      <td>{{ h.nombre }}</td>
-      <td>{{ h.host }}</td>
-      <td>{{ h.es_raid }}</td>
-      <td>{{ h.ubicacion }}</td>
-      <td>{{ h.tareas|length }}</td>
-      <td>
-        <button class="link test-btn" data-url="/origenes/host/{{ h.id }}/test">Probar</button>
-        <form method="post" action="/origenes/host/{{ h.id }}/eliminar" class="inline"
-              onsubmit="return confirm('¿Eliminar host {{ h.nombre }} y sus tareas?')">
-          <button class="link danger">Eliminar</button>
-        </form>
-      </td>
-    </tr>
-    <tr class="row-detail" id="host-{{ h.id }}" hidden>
-      <td colspan="8">
-        {% if h.tareas %}
-        <table class="data sub">
-          <thead><tr>
-            <th>Carpeta</th><th>Tipo</th><th>Destino</th><th>Estado</th><th>Progreso</th>
-            <th>Última</th><th>Siguiente</th><th>Puntuación</th><th></th>
-          </tr></thead>
-          <tbody>
-          {% for t in h.tareas %}
-            <tr>
-              <td><a href="/tareas/{{ t.id }}">{{ t.carpeta_origen }}</a></td>
-              <td>{{ t.tipo }}</td>
-              <td>{{ t.destino }}</td>
-              <td><span class="badge estado-{{ t.estado }}" data-tarea-estado="{{ t.id }}">{{ t.estado }}</span></td>
-              <td>
-                <div class="progress"><div class="progress-fill" data-tarea-bar="{{ t.id }}" style="width: {{ t.porcentaje }}%"></div></div>
-                <span data-tarea-pct="{{ t.id }}">{{ t.porcentaje }}%</span>
-              </td>
-              <td>{{ t.last_run_at|datetime_fmt }}</td>
-              <td>{{ t.next_run_at|datetime_fmt }}</td>
-              <td>
-                <div class="scorebar" role="img" title="Protección: {{ t.score_texto }}"
-                     aria-label="Protección: {{ t.score_texto }}">
-                  <div class="scorebar-fill {{ t.score_color }}" style="width: {{ t.score_pct }}%"></div>
-                </div>
-              </td>
-              <td>
-                <form method="post" action="/tareas/{{ t.id }}/run" class="inline"><button class="link">Ejecutar ya</button></form>
-                <form method="post" action="/tareas/{{ t.id }}/eliminar" class="inline"
-                      onsubmit="return confirm('¿Eliminar tarea?')"><button class="link danger">×</button></form>
-              </td>
-            </tr>
-          {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-          <span class="muted">Este host no tiene tareas de backup. <a href="/origenes/nuevo">Añadir origen</a>.</span>
-        {% endif %}
-      </td>
-    </tr>
+{% for h in hosts %}
+<section class="host-block">
+  <div class="host-head">
+    <span class="semaforo s-{{ h.semaforo }}" data-host="{{ h.id }}" title="{{ h.estado_conexion }}"></span>
+    <strong>{{ h.nombre }}</strong>
+    <span class="muted">{{ h.host }} · {{ h.conector }} · {{ h.ubicacion }}</span>
+    <span class="host-actions">
+      <button class="link test-btn" data-url="/origenes/host/{{ h.id }}/test">Probar</button>
+      <a class="link" href="/origenes/host/{{ h.id }}/configurar">Configurar host</a>
+      <form method="post" action="/origenes/host/{{ h.id }}/eliminar" class="inline"
+            onsubmit="return confirm('¿Eliminar host {{ h.nombre }} y todos sus orígenes y tareas?')">
+        <button class="link danger">Eliminar</button>
+      </form>
+    </span>
+  </div>
+
+  {% for v in h.volumenes %}
+  <div class="volumen-head">📦 {{ v.nombre }} <span class="badge proteccion-{{ v.proteccion }}">{{ {'single':'Sin protección','raid1':'RAID 1 disco','raid2':'RAID 2 discos'}[v.proteccion] }}</span></div>
+  <table class="data sub">
+    <thead><tr>
+      <th>Origen</th><th>Tamaño</th><th>Protección</th><th>Estado copia</th><th>Última copia OK</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for o in v.origenes %}
+      <tr {% if o.estado == 'desaparecido' %}class="huerfano"{% endif %}>
+        <td>
+          {% if o.tipo == 'config' %}🧩{% else %}📁{% endif %} {{ o.nombre }}
+          {% if o.estado == 'desaparecido' %}<span class="badge estado-fallida" title="El origen ya no existe: tareas huérfanas">desaparecido</span>{% endif %}
+        </td>
+        <td>{{ o.tamano_bytes|human_bytes if o.tamano_bytes is not none else '—' }}</td>
+        <td>
+          <div class="scorebar" role="img" title="Protección: {{ o.score_texto }}" aria-label="Protección: {{ o.score_texto }}">
+            <div class="scorebar-fill {{ o.score_color }}" style="width: {{ o.score_pct }}%"></div>
+          </div>
+        </td>
+        <td><span class="badge copia-{{ o.estado_copia }}">{{ copia_label[o.estado_copia] }}</span></td>
+        <td>{{ o.ultima_ok|datetime_fmt if o.ultima_ok else '—' }}</td>
+        <td>
+          {% if o.n_tareas %}
+            <a class="link" href="/origenes/origen/{{ o.id }}">Editar ({{ o.n_tareas }})</a>
+          {% else %}
+            <a class="link" href="/origenes/origen/{{ o.id }}">Configurar</a>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
   {% else %}
-    <tr><td colspan="8" class="muted">No hay hosts. Empieza por <a href="/origenes/host/nuevo">añadir un host</a>.</td></tr>
+  <p class="muted">Sin volúmenes descubiertos.</p>
   {% endfor %}
-  </tbody>
-</table>
+</section>
+{% else %}
+<p class="muted">No hay hosts. Empieza por <a href="/origenes/host/nuevo">añadir un host</a>.</p>
+{% endfor %}
 {% endblock %}

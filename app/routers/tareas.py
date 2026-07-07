@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.db import session_scope
 from app.deps import require_login
 from app.models import Ejecucion, Tarea
-from app.services import tarea_score
+from app.services import origen_score_bar
 from app.templating import templates
 
 router = APIRouter(prefix="/tareas")
@@ -37,9 +37,11 @@ async def toggle(tarea_id: int, _: int = Depends(require_login)):
 async def eliminar(tarea_id: int, _: int = Depends(require_login)):
     with session_scope() as session:
         t = session.get(Tarea, tarea_id)
+        origen_id = t.origen_id if t else None
         if t:
             session.delete(t)
-    return RedirectResponse("/origenes", status_code=303)
+    destino = f"/origenes/origen/{origen_id}" if origen_id else "/origenes"
+    return RedirectResponse(destino, status_code=303)
 
 
 @router.get("/{tarea_id}", response_class=HTMLResponse)
@@ -48,7 +50,8 @@ async def detalle(tarea_id: int, request: Request, _: int = Depends(require_logi
         t = session.get(Tarea, tarea_id)
         if not t:
             return RedirectResponse("/origenes", status_code=303)
-        sb = tarea_score(t)
+        origen = t.origen
+        sb = origen_score_bar(origen)
         ejecuciones = [
             {
                 "inicio": e.inicio, "fin": e.fin, "resultado": e.resultado,
@@ -61,14 +64,17 @@ async def detalle(tarea_id: int, request: Request, _: int = Depends(require_logi
         ]
         data = {
             "id": t.id,
-            "carpeta_origen": t.carpeta_origen,
-            "host": t.host_origen.nombre,
+            "origen_id": origen.id,
+            "origen": origen.nombre,
+            "ruta": origen.ruta,
+            "host": origen.volumen.host_origen.nombre,
+            "volumen": origen.volumen.nombre,
             "destino": t.destino.nombre,
             "tipo": t.tipo,
             "cron": t.cron,
             "estado": t.estado,
             "porcentaje": t.porcentaje,
-            "retencion": t.retencion,
+            "retencion_dias": t.retencion_dias,
             "comando_rsync": t.comando_rsync,
             "rsync_extra": t.rsync_extra,
             "last_run_at": t.last_run_at,

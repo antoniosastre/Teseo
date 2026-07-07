@@ -21,6 +21,23 @@ from dataclasses import dataclass
 BASE_FLAGS = ["-a", "-z", "--info=progress2", "--stats"]
 
 
+# Metacaracteres de shell que permitirían encadenar/inyectar comandos en un
+# override manual. Un override debe ser UNA invocación de rsync.
+_SHELL_METACHARS = (";", "|", "&", "`", "$(", ">", "<", "\n", "\r")
+
+
+def validate_override(comando: str) -> str | None:
+    """Valida el override manual de comando rsync. Devuelve mensaje de error o None."""
+    cmd = comando.strip()
+    if not cmd:
+        return None
+    if cmd.split()[0] != "rsync":
+        return "El comando personalizado debe empezar por 'rsync'."
+    if any(mc in cmd for mc in _SHELL_METACHARS):
+        return "El comando personalizado no puede contener ; | & ` $( > < ni saltos de línea."
+    return None
+
+
 def sanitize_component(value: str) -> str:
     """Convierte una ruta/origen en un nombre de subcarpeta seguro y plano."""
     value = value.strip().strip("/")
@@ -29,10 +46,15 @@ def sanitize_component(value: str) -> str:
     return value or "root"
 
 
-def dest_task_dir(carpeta_base: str, host_nombre: str, tipo: str, carpeta_origen: str) -> str:
-    """Directorio raíz de la tarea dentro del destino (sin la parte de contenido)."""
+def dest_task_dir(
+    carpeta_base: str, host_nombre: str, volumen_nombre: str, origen_nombre: str, tipo: str
+) -> str:
+    """Directorio raíz de la tarea en el destino: base/host/volumen/origen/tipo."""
     base = carpeta_base.rstrip("/")
-    return f"{base}/{sanitize_component(host_nombre)}/{tipo}/{sanitize_component(carpeta_origen)}"
+    return (
+        f"{base}/{sanitize_component(host_nombre)}/{sanitize_component(volumen_nombre)}"
+        f"/{sanitize_component(origen_nombre)}/{tipo}"
+    )
 
 
 @dataclass
@@ -55,21 +77,28 @@ def ssh_transport(destino_puerto: int, key_path: str | None) -> str:
 
 def build_plan(
     *,
-    carpeta_origen: str,
+    ruta_origen: str,
     carpeta_base: str,
     host_nombre: str,
+    volumen_nombre: str,
+    origen_nombre: str,
     tipo: str,
     destino_usuario: str,
     destino_host: str,
     destino_puerto: int = 22,
     key_path: str | None = None,
     extra_flags: str | None = None,
+    filtros: list[str] | None = None,
     delete: bool = True,
     timestamp: dt.datetime | None = None,
 ) -> RsyncPlan:
-    """Genera el plan rsync para una ejecución (espejo o incremental)."""
+    """Genera el plan rsync para una ejecución (espejo o incremental).
+
+    ``ruta_origen`` es la ruta a copiar en el host; ``filtros`` son flags de
+    include/exclude que aporta el conector (p. ej. el bundle @ de Synology).
+    """
     flags = list(BASE_FLAGS)
-    dest_root = dest_task_dir(carpeta_base, host_nombre, tipo, carpeta_origen)
+    dest_root = dest_task_dir(carpeta_base, host_nombre, volumen_nombre, origen_nombre, tipo)
 
     if tipo == "incremental":
         ts = (timestamp or dt.datetime.now()).strftime("%Y-%m-%d_%H%M%S")
@@ -83,9 +112,13 @@ def build_plan(
         if delete:
             flags.append("--delete")
 
-    extra = shlex.split(extra_flags) if extra_flags else []
+    # Citamos cada token (filtros del conector + extras del usuario) con
+    # shlex.quote antes de unir: ningún metacarácter queda a merced del shell
+    # remoto (evita inyección, p. ej. "--rsh=$(...)").
+    filtro_tokens = [shlex.quote(f) for f in (filtros or [])]
+    extra = [shlex.quote(t) for t in shlex.split(extra_flags)] if extra_flags else []
 
-    src = carpeta_origen.rstrip("/") + "/"
+    src = ruta_origen.rstrip("/") + "/"
     remote = f"{destino_usuario}@{destino_host}:{dest_target}/"
     transport = ssh_transport(destino_puerto, key_path)
 
@@ -94,6 +127,7 @@ def build_plan(
         ["rsync"]
         + flags
         + ["-e", shlex.quote(transport)]
+        + filtro_tokens
         + extra
         + [shlex.quote(src), shlex.quote(remote)]
     )
@@ -109,25 +143,31 @@ def build_plan(
 
 def preview_command(
     *,
-    carpeta_origen: str,
+    ruta_origen: str,
     carpeta_base: str,
     host_nombre: str,
+    volumen_nombre: str,
+    origen_nombre: str,
     tipo: str,
     destino_usuario: str,
     destino_host: str,
     destino_puerto: int = 22,
     extra_flags: str | None = None,
+    filtros: list[str] | None = None,
 ) -> str:
     """Comando representativo para mostrar en 'opciones avanzadas' del formulario."""
     plan = build_plan(
-        carpeta_origen=carpeta_origen,
+        ruta_origen=ruta_origen,
         carpeta_base=carpeta_base,
         host_nombre=host_nombre,
+        volumen_nombre=volumen_nombre,
+        origen_nombre=origen_nombre,
         tipo=tipo,
         destino_usuario=destino_usuario,
         destino_host=destino_host,
         destino_puerto=destino_puerto,
         key_path="~/.ssh/teseo_taskkey",
         extra_flags=extra_flags,
+        filtros=filtros,
     )
     return plan.command

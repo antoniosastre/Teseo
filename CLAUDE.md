@@ -78,25 +78,26 @@ app/                      # Web FastAPI + Jinja
   config.py               # carga/escritura config.ini (DatabaseConfig, SmtpConfig, AppConfig); CONFIG_PATH (env TESEO_CONFIG)
   db.py                   # engine/sesión SQLAlchemy; session_scope(); init_engine()/reset_engine()
   crypto.py               # SecretBox (Fernet) + generate_key()
-  models.py               # ORM: Admin, Ubicacion, HostOrigen, Destino, SshKeypair, Tarea, Ejecucion + enums de dominio
+  models.py               # ORM: Admin, Ubicacion, Ajuste, HostOrigen, Volumen, Origen, HistoricoTamano, Destino, SshKeypair, Tarea, Ejecucion + enums
   auth.py                 # hash/verify argon2, authenticate(), helpers de sesión
   deps.py                 # require_login (lanza RedirectException), get_secret_box()
   templating.py           # Jinja2Templates + filtros human_bytes / datetime_fmt
-  services.py             # ssh_target_for_host/destino, host_semaforo(), tarea_score()
-  rsync_cmd.py            # build_plan()/preview_command(): construye comando rsync y layout de carpetas
-  remote.py               # paramiko: connect(), run(), test_connection(), list_directories(), disk_usage()
+  services.py             # ssh_target_*, host_semaforo(), origen_score_bar(), estado_copia(), ultima_copia_ok(), explorar_host()/persistir_descubrimiento()
+  rsync_cmd.py            # build_plan()/preview_command()/validate_override(): comando rsync, layout, filtros del conector
+  remote.py               # paramiko: connect() (pinning host_key), run(), test_connection(), disk_usage()
   installer/              # asistente /install (service.py: test_connection, create_database, run_install)
-  routers/               # dashboard, auth, ubicaciones, destinos, origenes, tareas, estado (SSE)
-  templates/ static/      # Jinja + style.css + app.js (expandibles, SSE, examinar carpetas, preview, alta inline)
+  routers/               # dashboard, auth, ubicaciones, destinos, origenes (wizard+jerarquía), tareas, estado (SSE)
+  templates/ static/      # Jinja + style.css + app.js (SSE, probar conexión, alta inline)
+connectors/               # estrategia por dispositivo: __init__ (interfaz+registro), synology.py (reglas), plesk.py (stub)
 daemon/                   # Servicio teseod
   teseod.py               # bucle scheduler (clase Daemon), concurrencia MAX_CONCURRENCY=3, monitor cada 300s
   keyprov.py              # ensure_trust(): genera/instala/valida claves SSH origen→destino
-  runner.py               # run_tarea(): ejecuta rsync con streaming de progreso, post-proceso incremental
-  retention.py            # set_current_symlink(), apply_retention()
-  monitor.py              # check_destinos() (df/du), check_origenes() (accesibilidad)
+  runner.py               # run_tarea(): rsync con streaming de progreso; usa el conector para fuente+filtros
+  retention.py            # set_current_symlink(), apply_retention() (por DÍAS)
+  monitor.py              # check_destinos() (df/du), check_origenes() (accesibilidad + aprende host_key)
   notify.py               # email SMTP (notify_failure, notify_unreachable)
-scoring/__init__.py       # score()/classify() — PLACEHOLDER reemplazable
-migrations/schema.sql     # esquema de referencia (el instalador lo crea solo con create_all)
+scoring/__init__.py       # origen_score()/score_bar()/classify(): fórmula por origen + barra gráfica
+migrations/schema.sql     # esquema de referencia (DESACTUALIZADO; la verdad es create_all sobre models.py)
 deploy/                   # teseo-web.service, teseod.service (systemd)
 tests/                    # pytest sobre SQLite en memoria (conftest.py, test_app.py, test_rsync_cmd.py)
 config.ini.example        # ejemplo (el real lo genera /install; está en .gitignore)
@@ -106,21 +107,29 @@ config.ini.example        # ejemplo (el real lo genera /install; está en .gitig
 
 ## 5. Modelo de datos (resumen)
 
-- **admins**(username único, password_hash argon2, email)
-- **ubicaciones**(nombre único) — ubicación física para puntuar protección
-- **hosts_origen**(nombre único, host, puerto, usuario, auth_method key|password,
-  secret_cifrado, host_key, es_raid single|raid1|raid2, ubicacion_id, estado_conexion)
-- **destinos**(nombre único, conexión SSH, carpeta_base, proteccion single|raid1|raid2,
-  ubicacion_id, estado, espacio_total/backups/libre)
-- **ssh_keypairs**(private_key_cifrada, public_key, fingerprint, estado)
-- **tareas**(host_origen_id, destino_id, carpeta_origen, tipo espejo|incremental, cron,
-  comando_rsync override, rsync_extra, retencion, estado, porcentaje, run_now, activa,
-  last_run_at, next_run_at, ssh_keypair_id) — UNIQUE(host,destino,carpeta)
-- **ejecuciones**(tarea_id, inicio, fin, resultado ok|fallo|cancelada, bytes_transferidos,
-  snapshot_path, resumen, error) — historial
+Jerarquía de orígenes: **Host → Volumen → Origen → (0..n) Tarea**. El RAID es del
+**volumen**; la ubicación física, del **host**. El conector descubre los orígenes.
 
-Enums de dominio definidos en `app/models.py` (AUTH_METHODS, PROTECCIONES, TIPOS_TAREA,
-ESTADOS_TAREA, ESTADOS_CONEXION, RESULTADOS_EJEC).
+- **admins**(username único, password_hash argon2, email)
+- **ubicaciones**(nombre único) — ubicación física del host, para puntuar protección
+- **ajustes**(clave PK, valor) — ajustes globales editables (p. ej. intervalo del analizador)
+- **hosts_origen**(nombre único, tipo_conector synology|plesk, host, puerto, usuario,
+  auth_method, secret_cifrado, host_key, ubicacion_id, estado_conexion)
+- **volumenes**(host_origen_id, nombre, proteccion single|raid1|raid2) — UNIQUE(host,nombre)
+- **origenes**(volumen_id, nombre, tipo carpeta|config, ruta, tamano_bytes, last_size_check,
+  estado activo|desaparecido) — UNIQUE(volumen,ruta). "desaparecido" ⇒ tareas huérfanas
+- **historico_tamano**(origen_id, timestamp, bytes) — serie temporal del tamaño
+- **destinos**(nombre único, conexión SSH, host_key, carpeta_base, proteccion, ubicacion_id,
+  estado, espacio_total/backups/libre)
+- **ssh_keypairs**(private_key_cifrada, public_key, fingerprint, estado)
+- **tareas**(origen_id, destino_id, tipo espejo|incremental, cron, comando_rsync override,
+  rsync_extra, retencion_dias, estado, porcentaje, run_now, activa, last_run_at, next_run_at,
+  ssh_keypair_id) — UNIQUE(origen,destino,tipo)
+- **ejecuciones**(tarea_id, inicio, fin, resultado, bytes_transferidos, snapshot_path,
+  resumen, error) — historial
+
+Enums en `app/models.py`: AUTH_METHODS, PROTECCIONES, CONECTORES, TIPOS_ORIGEN,
+ESTADOS_ORIGEN, TIPOS_TAREA, ESTADOS_TAREA, ESTADOS_CONEXION, RESULTADOS_EJEC.
 
 ---
 
@@ -145,11 +154,12 @@ python -m daemon.teseod
 
 ### Layout de copias en el destino
 ```
-<carpeta_base>/<host_origen>/<tipo_tarea>/<carpeta_origen>/<contenido>
+<carpeta_base>/<host>/<volumen>/<origen>/<tipo_tarea>/<contenido>
 ```
 - **espejo**: `.../current/` con `--delete`.
 - **incremental**: `.../<YYYY-MM-DD_HHMMSS>/` + enlace `current` → último snapshot, con
-  `--link-dest=../current` (hardlinks). `apply_retention()` conserva los N más recientes.
+  `--link-dest=../current` (hardlinks). `apply_retention()` borra los snapshots con más de
+  N **días** de antigüedad (conserva siempre el más reciente).
 
 ---
 
@@ -172,16 +182,19 @@ pytest -q          # 14 tests, SQLite en memoria
 
 ## 8. Trabajo pendiente / próximos pasos
 
-1. ~~Fórmula definitiva de la puntuación de protección~~ **CERRADO (070726).** Definida en
-   `scoring/__init__.py`: `score()`/`score_bar()`; la consume `app/services.py:tarea_score()`
-   (que devuelve un `ScoreBar`). Fórmula (máx. 6): RAID origen (raid1+1/raid2+2) + tiene
-   copia (+1) + RAID destino (raid1+1/raid2+2) + ubicación física distinta (+1). La UI la
-   pinta como barra gráfica no numérica (0 rojo 10% → 6 azul 100%). Para reajustar el
-   criterio, editar SOLO ese módulo.
-2. Posibles mejoras no pedidas aún: gestión de múltiples admins desde la UI, edición de
-   destinos/hosts/tareas existentes (hoy hay alta y borrado, no edición), paginación del
-   historial, CI con pytest, cancelación de copias en curso, throttling de `du` en
-   destinos grandes (ya se cachea en BD vía monitor).
+1. ~~Fórmula de scoring~~ **CERRADO (070726).** `scoring/__init__.py`: `origen_score()` (regla
+   "mejor copia") + `score_bar()`; lo consume `app/services.py:origen_score_bar()`. Máx. 6:
+   RAID volumen (raid1+1/raid2+2) + tiene copia (+1) + RAID destino (raid1+1/raid2+2) +
+   ubicación distinta (+1). UI: barra gráfica no numérica (0 rojo 10% → 6 azul 100%).
+2. **Rediseño de orígenes por conectores** — núcleo, wizard y vista HECHOS (rama
+   `claude/rediseno-origenes-nucleo`): modelo Host→Volumen→Origen→Tarea, `connectors/`
+   (Synology completo, Plesk stub), wizard de 2 pantallas, vista jerárquica, retención por días.
+   PENDIENTE en fases siguientes: **analizador periódico** (refresco de tamaño con `du` +
+   `historico_tamano`, re-exploración, detección de huérfanas + email; intervalo en tabla
+   `ajustes`, disparable manual), **CRUD de ubicaciones** en Ajustes, cálculo real de tamaño
+   por `du`, y las reglas del **conector Plesk**.
+3. Mejoras varias: múltiples admins UI, cancelación de copias en curso, paginación del
+   historial. (CI con pytest ya existe en rama aparte.)
 
 ---
 

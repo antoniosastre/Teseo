@@ -21,29 +21,38 @@ def test_sanitize_component():
 
 
 def test_dest_layout():
-    d = dest_task_dir("/backups/", "web 1", "incremental", "/var/www")
-    assert d == "/backups/web_1/incremental/var_www"
+    d = dest_task_dir("/backups/", "web 1", "volume1", "Configuración", "incremental")
+    assert d == "/backups/web_1/volume1/Configuraci_n/incremental"
+
+
+def _plan(**kw):
+    base = dict(ruta_origen="/volume1/web", carpeta_base="/bk", host_nombre="h",
+                volumen_nombre="volume1", origen_nombre="web", tipo="espejo",
+                destino_usuario="u", destino_host="nas", key_path="/k")
+    base.update(kw)
+    return build_plan(**base)
 
 
 def test_espejo_lleva_delete():
-    p = build_plan(carpeta_origen="/data", carpeta_base="/bk", host_nombre="h",
-                   tipo="espejo", destino_usuario="u", destino_host="nas", key_path="/k")
+    p = _plan(tipo="espejo")
     assert "--delete" in p.command and p.dest_target.endswith("/current")
     assert p.snapshot_name is None
 
 
 def test_incremental_usa_link_dest():
-    p = build_plan(carpeta_origen="/data", carpeta_base="/bk", host_nombre="h",
-                   tipo="incremental", destino_usuario="u", destino_host="nas", key_path="/k")
+    p = _plan(tipo="incremental")
     assert "--link-dest=../current" in p.command
     assert p.snapshot_name and p.snapshot_name in p.dest_target
 
 
 def test_transporte_ssh_con_puerto_y_clave():
-    p = build_plan(carpeta_origen="/data", carpeta_base="/bk", host_nombre="h",
-                   tipo="espejo", destino_usuario="u", destino_host="nas",
-                   destino_puerto=2222, key_path="/home/u/.ssh/k")
+    p = _plan(destino_puerto=2222, key_path="/home/u/.ssh/k")
     assert "-p 2222" in p.command and "-i /home/u/.ssh/k" in p.command
+
+
+def test_filtros_del_conector_se_incluyen_citados():
+    p = _plan(filtros=["--include=@*", "--exclude=*"])
+    assert "--include=@*" in p.command and "--exclude=*" in p.command
 
 
 def test_scoring_maximo_son_6_puntos():

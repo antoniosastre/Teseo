@@ -31,8 +31,8 @@ async def dashboard(request: Request, _: int = Depends(require_login)):
         # Precargar relaciones para el template.
         data_ultimas = [
             {
-                "tarea": e.tarea.carpeta_origen,
-                "host": e.tarea.host_origen.nombre,
+                "tarea": e.tarea.origen.nombre,
+                "host": e.tarea.origen.volumen.host_origen.nombre,
                 "inicio": e.inicio,
                 "fin": e.fin,
                 "resultado": e.resultado,

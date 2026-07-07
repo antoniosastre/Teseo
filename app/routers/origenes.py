@@ -1,4 +1,13 @@
-"""Gestión de hosts origen y de orígenes (tareas de backup)."""
+"""Gestión de hosts de origen, exploración por conector y orígenes de copia.
+
+Flujo de alta (wizard de 2 pantallas):
+  1. /origenes/host/nuevo  -> datos de conexión + conector.
+  2. POST /origenes/host    -> crea host, EXPLORA con el conector, redirige a…
+  3. /origenes/host/{id}/configurar -> RAID por volumen + ubicación del host.
+
+La vista /origenes muestra la jerarquía Host → Volumen → Origen con la barra de
+protección, el estado de copia y los botones Configurar/Editar por origen.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -7,69 +16,82 @@ from sqlalchemy import select
 
 from app.db import session_scope
 from app.deps import get_secret_box, require_login
-from app.models import PROTECCIONES, TIPOS_TAREA, Destino, HostOrigen, Tarea, Ubicacion
-from app.remote import SshError, SshTarget, list_directories, test_connection
-from app.rsync_cmd import preview_command
-from app.services import host_semaforo, ssh_target_for_host, tarea_score
+from app.models import (
+    CONECTORES,
+    PROTECCIONES,
+    TIPOS_TAREA,
+    Destino,
+    HostOrigen,
+    Origen,
+    Tarea,
+    Ubicacion,
+    Volumen,
+)
+from app.remote import SshError, test_connection
+from app.rsync_cmd import preview_command, validate_override
+from app.services import (
+    estado_copia,
+    explorar_host,
+    host_semaforo,
+    origen_score_bar,
+    ssh_target_for_host,
+    ultima_copia_ok,
+)
+from connectors import conectores_disponibles, get_connector
 from app.templating import templates
 
 router = APIRouter(prefix="/origenes")
 
+_CONECTOR_LABEL = dict(conectores_disponibles())
+
+
+# --- Vista jerárquica --------------------------------------------------------
 
 @router.get("", response_class=HTMLResponse)
 async def listar(request: Request, _: int = Depends(require_login)):
     with session_scope() as session:
-        hosts = list(session.scalars(select(HostOrigen).order_by(HostOrigen.nombre)))
-        rows = []
-        for h in hosts:
-            tareas = []
-            for t in h.tareas:
-                sb = tarea_score(t)
-                tareas.append(
-                    {
-                        "id": t.id,
-                        "carpeta_origen": t.carpeta_origen,
-                        "tipo": t.tipo,
-                        "estado": t.estado,
-                        "porcentaje": t.porcentaje,
-                        "destino": t.destino.nombre,
-                        "last_run_at": t.last_run_at,
-                        "next_run_at": t.next_run_at,
-                        "activa": t.activa,
+        hosts_data = []
+        for h in session.scalars(select(HostOrigen).order_by(HostOrigen.nombre)):
+            volumenes = []
+            for vol in sorted(h.volumenes, key=lambda v: v.nombre):
+                origenes = []
+                for o in sorted(vol.origenes, key=lambda o: o.nombre):
+                    sb = origen_score_bar(o)
+                    origenes.append({
+                        "id": o.id,
+                        "nombre": o.nombre,
+                        "tipo": o.tipo,
+                        "estado": o.estado,
+                        "tamano_bytes": o.tamano_bytes,
+                        "n_tareas": len([t for t in o.tareas]),
+                        "estado_copia": estado_copia(o),
+                        "ultima_ok": ultima_copia_ok(o),
                         "score_pct": sb.pct,
                         "score_color": sb.color,
                         "score_texto": sb.texto,
-                    }
-                )
-            rows.append(
-                {
-                    "id": h.id,
-                    "nombre": h.nombre,
-                    "host": h.host,
-                    "semaforo": host_semaforo(h),
-                    "estado_conexion": h.estado_conexion,
-                    "es_raid": h.es_raid,
-                    "ubicacion": h.ubicacion.nombre if h.ubicacion else "—",
-                    "tareas": tareas,
-                }
-            )
+                    })
+                volumenes.append({"id": vol.id, "nombre": vol.nombre,
+                                  "proteccion": vol.proteccion, "origenes": origenes})
+            hosts_data.append({
+                "id": h.id, "nombre": h.nombre, "host": h.host,
+                "conector": _CONECTOR_LABEL.get(h.tipo_conector, h.tipo_conector),
+                "semaforo": host_semaforo(h), "estado_conexion": h.estado_conexion,
+                "ubicacion": h.ubicacion.nombre if h.ubicacion else "—",
+                "volumenes": volumenes,
+            })
     return templates.TemplateResponse(
-        "origenes.html", {"request": request, "active": "origenes", "hosts": rows}
+        "origenes.html", {"request": request, "active": "origenes", "hosts": hosts_data}
     )
 
 
-# --- Alta de host origen -----------------------------------------------------
+# --- Wizard: pantalla 1 (alta + exploración) ---------------------------------
 
 @router.get("/host/nuevo", response_class=HTMLResponse)
 async def host_form(request: Request, _: int = Depends(require_login)):
-    with session_scope() as session:
-        ubicaciones = [{"id": u.id, "nombre": u.nombre} for u in session.scalars(select(Ubicacion).order_by(Ubicacion.nombre))]
     return templates.TemplateResponse(
         "host_form.html",
-        {
-            "request": request, "active": "origenes", "ubicaciones": ubicaciones,
-            "protecciones": PROTECCIONES, "error": None, "form": {},
-        },
+        {"request": request, "active": "origenes", "conectores": conectores_disponibles(),
+         "error": None, "form": {}},
     )
 
 
@@ -77,45 +99,104 @@ async def host_form(request: Request, _: int = Depends(require_login)):
 async def host_crear(
     request: Request,
     nombre: str = Form(...),
+    tipo_conector: str = Form(...),
     host: str = Form(...),
     puerto: int = Form(22),
     usuario: str = Form(...),
     auth_method: str = Form("password"),
     secret: str = Form(""),
-    es_raid: str = Form("single"),
-    ubicacion_id: str = Form(""),
     _: int = Depends(require_login),
 ):
     box = get_secret_box()
-    form = {
-        "nombre": nombre, "host": host, "puerto": puerto, "usuario": usuario,
-        "auth_method": auth_method, "es_raid": es_raid, "ubicacion_id": ubicacion_id,
-    }
+    form = {"nombre": nombre, "tipo_conector": tipo_conector, "host": host,
+            "puerto": puerto, "usuario": usuario, "auth_method": auth_method}
 
     def fail(msg: str):
-        with session_scope() as session:
-            ubicaciones = [{"id": u.id, "nombre": u.nombre} for u in session.scalars(select(Ubicacion).order_by(Ubicacion.nombre))]
         return templates.TemplateResponse(
             "host_form.html",
-            {"request": request, "active": "origenes", "ubicaciones": ubicaciones,
-             "protecciones": PROTECCIONES, "error": msg, "form": form},
+            {"request": request, "active": "origenes", "conectores": conectores_disponibles(),
+             "error": msg, "form": form},
         )
+
+    if tipo_conector not in CONECTORES:
+        return fail("Conector no válido.")
 
     with session_scope() as session:
         if session.scalar(select(HostOrigen).where(HostOrigen.nombre == nombre.strip())):
             return fail("Ya existe un host con ese nombre.")
-        session.add(
-            HostOrigen(
-                nombre=nombre.strip(),
-                host=host.strip(),
-                puerto=puerto,
-                usuario=usuario.strip(),
-                auth_method=auth_method if auth_method in ("key", "password") else "password",
-                secret_cifrado=box.encrypt(secret),
-                es_raid=es_raid if es_raid in PROTECCIONES else "single",
-                ubicacion_id=int(ubicacion_id) if ubicacion_id else None,
-            )
+        host_obj = HostOrigen(
+            nombre=nombre.strip(),
+            tipo_conector=tipo_conector,
+            host=host.strip(),
+            puerto=puerto,
+            usuario=usuario.strip(),
+            auth_method=auth_method if auth_method in ("key", "password") else "password",
+            secret_cifrado=box.encrypt(secret),
         )
+        session.add(host_obj)
+        session.flush()
+        host_id = host_obj.id
+        # Exploración con el conector (conecta por SSH y descubre volúmenes/orígenes).
+        try:
+            explorar_host(session, host_obj, box)
+            host_obj.estado_conexion = "conectado"
+        except SshError as exc:
+            session.rollback()
+            return fail(f"No se pudo explorar el host: {exc}")
+        except NotImplementedError:
+            session.rollback()
+            return fail("El conector seleccionado aún no soporta el descubrimiento de orígenes.")
+
+    return RedirectResponse(f"/origenes/host/{host_id}/configurar", status_code=303)
+
+
+# --- Wizard: pantalla 2 (RAID por volumen + ubicación del host) --------------
+
+@router.get("/host/{host_id}/configurar", response_class=HTMLResponse)
+async def host_configurar_form(host_id: int, request: Request, _: int = Depends(require_login)):
+    with session_scope() as session:
+        h = session.get(HostOrigen, host_id)
+        if not h:
+            return RedirectResponse("/origenes", status_code=303)
+        volumenes = [
+            {"id": v.id, "nombre": v.nombre, "proteccion": v.proteccion,
+             "n_origenes": len(v.origenes)}
+            for v in sorted(h.volumenes, key=lambda v: v.nombre)
+        ]
+        ubicaciones = [{"id": u.id, "nombre": u.nombre}
+                       for u in session.scalars(select(Ubicacion).order_by(Ubicacion.nombre))]
+        data = {"id": h.id, "nombre": h.nombre, "ubicacion_id": h.ubicacion_id}
+    return templates.TemplateResponse(
+        "host_config.html",
+        {"request": request, "active": "origenes", "host": data,
+         "volumenes": volumenes, "ubicaciones": ubicaciones, "protecciones": PROTECCIONES},
+    )
+
+
+@router.post("/host/{host_id}/configurar")
+async def host_configurar(
+    host_id: int, request: Request, _: int = Depends(require_login)
+):
+    form = await request.form()
+    with session_scope() as session:
+        h = session.get(HostOrigen, host_id)
+        if not h:
+            return RedirectResponse("/origenes", status_code=303)
+        ubic = form.get("ubicacion_id")
+        h.ubicacion_id = int(ubic) if ubic else None
+        for vol in h.volumenes:
+            valor = form.get(f"proteccion_{vol.id}")
+            if valor in PROTECCIONES:
+                vol.proteccion = valor
+    return RedirectResponse("/origenes", status_code=303)
+
+
+@router.post("/host/{host_id}/eliminar")
+async def host_eliminar(host_id: int, _: int = Depends(require_login)):
+    with session_scope() as session:
+        h = session.get(HostOrigen, host_id)
+        if h:
+            session.delete(h)  # cascada: volúmenes, orígenes y tareas
     return RedirectResponse("/origenes", status_code=303)
 
 
@@ -127,140 +208,114 @@ async def host_test(host_id: int, _: int = Depends(require_login)):
         if not h:
             return JSONResponse({"ok": False, "message": "No existe"}, status_code=404)
         target = ssh_target_for_host(h, box)
-    ok, message = test_connection(target)
+    ok, message, learned = test_connection(target)
+    if learned:
+        with session_scope() as session:
+            h = session.get(HostOrigen, host_id)
+            if h and not h.host_key:
+                h.host_key = learned
     return JSONResponse({"ok": ok, "message": message})
 
 
-@router.get("/host/{host_id}/carpetas")
-async def host_carpetas(host_id: int, path: str = "/", _: int = Depends(require_login)):
-    """Lista subdirectorios del host para el selector de carpeta a copiar."""
-    box = get_secret_box()
+# --- Gestión de tareas de un origen ------------------------------------------
+
+@router.get("/origen/{origen_id}", response_class=HTMLResponse)
+async def origen_detalle(origen_id: int, request: Request, _: int = Depends(require_login)):
     with session_scope() as session:
-        h = session.get(HostOrigen, host_id)
-        if not h:
-            return JSONResponse({"error": "No existe"}, status_code=404)
-        target = ssh_target_for_host(h, box)
-    try:
-        dirs = list_directories(target, path)
-        return JSONResponse({"path": path, "dirs": dirs})
-    except SshError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=502)
-
-
-@router.post("/host/{host_id}/eliminar")
-async def host_eliminar(host_id: int, _: int = Depends(require_login)):
-    with session_scope() as session:
-        h = session.get(HostOrigen, host_id)
-        if h:
-            session.delete(h)  # cascada elimina sus tareas
-    return RedirectResponse("/origenes", status_code=303)
-
-
-# --- Alta de origen (tarea) --------------------------------------------------
-
-@router.get("/nuevo", response_class=HTMLResponse)
-async def tarea_form(request: Request, _: int = Depends(require_login)):
-    with session_scope() as session:
-        hosts = [{"id": h.id, "nombre": h.nombre} for h in session.scalars(select(HostOrigen).order_by(HostOrigen.nombre))]
-        destinos = [{"id": d.id, "nombre": d.nombre} for d in session.scalars(select(Destino).order_by(Destino.nombre))]
+        o = session.get(Origen, origen_id)
+        if not o:
+            return RedirectResponse("/origenes", status_code=303)
+        sb = origen_score_bar(o)
+        tareas = [{
+            "id": t.id, "tipo": t.tipo, "destino": t.destino.nombre, "cron": t.cron,
+            "estado": t.estado, "porcentaje": t.porcentaje, "activa": t.activa,
+            "retencion_dias": t.retencion_dias, "last_run_at": t.last_run_at,
+            "next_run_at": t.next_run_at,
+        } for t in o.tareas]
+        destinos = [{"id": d.id, "nombre": d.nombre}
+                    for d in session.scalars(select(Destino).order_by(Destino.nombre))]
+        data = {
+            "id": o.id, "nombre": o.nombre, "tipo": o.tipo, "ruta": o.ruta,
+            "estado": o.estado, "tamano_bytes": o.tamano_bytes,
+            "volumen": o.volumen.nombre, "host": o.volumen.host_origen.nombre,
+            "score_pct": sb.pct, "score_color": sb.color, "score_texto": sb.texto,
+            "tareas": tareas,
+        }
     return templates.TemplateResponse(
-        "tarea_form.html",
-        {
-            "request": request, "active": "origenes",
-            "hosts": hosts, "destinos": destinos, "tipos": TIPOS_TAREA,
-            "error": None, "form": {},
-        },
+        "origen_detalle.html",
+        {"request": request, "active": "origenes", "origen": data,
+         "destinos": destinos, "tipos": TIPOS_TAREA, "error": request.query_params.get("error")},
     )
 
 
-@router.post("/preview")
-async def preview(
-    host_id: int = Form(...),
-    destino_id: int = Form(...),
-    carpeta_origen: str = Form(...),
-    tipo: str = Form("espejo"),
-    rsync_extra: str = Form(""),
-    _: int = Depends(require_login),
-):
-    """Devuelve el comando rsync por defecto para 'opciones avanzadas'."""
-    with session_scope() as session:
-        h = session.get(HostOrigen, host_id)
-        d = session.get(Destino, destino_id)
-        if not h or not d:
-            return JSONResponse({"error": "Host o destino inválido"}, status_code=400)
-        cmd = preview_command(
-            carpeta_origen=carpeta_origen,
-            carpeta_base=d.carpeta_base,
-            host_nombre=h.nombre,
-            tipo=tipo,
-            destino_usuario=d.usuario,
-            destino_host=d.host,
-            destino_puerto=d.puerto,
-            extra_flags=rsync_extra or None,
-        )
-    return JSONResponse({"command": cmd})
-
-
-@router.post("", response_class=HTMLResponse)
+@router.post("/origen/{origen_id}/tarea")
 async def tarea_crear(
-    request: Request,
-    host_id: int = Form(...),
+    origen_id: int,
     destino_id: int = Form(...),
-    carpeta_origen: str = Form(...),
     tipo: str = Form("espejo"),
     cron: str = Form("0 2 * * *"),
-    retencion: int = Form(7),
+    retencion_dias: int = Form(7),
     rsync_extra: str = Form(""),
     comando_rsync: str = Form(""),
     _: int = Depends(require_login),
 ):
-    form = {
-        "host_id": host_id, "destino_id": destino_id, "carpeta_origen": carpeta_origen,
-        "tipo": tipo, "cron": cron, "retencion": retencion,
-        "rsync_extra": rsync_extra, "comando_rsync": comando_rsync,
-    }
-
     def fail(msg: str):
-        with session_scope() as session:
-            hosts = [{"id": h.id, "nombre": h.nombre} for h in session.scalars(select(HostOrigen).order_by(HostOrigen.nombre))]
-            destinos = [{"id": d.id, "nombre": d.nombre} for d in session.scalars(select(Destino).order_by(Destino.nombre))]
-        return templates.TemplateResponse(
-            "tarea_form.html",
-            {"request": request, "active": "origenes", "hosts": hosts, "destinos": destinos,
-             "tipos": TIPOS_TAREA, "error": msg, "form": form},
-        )
+        return RedirectResponse(f"/origenes/origen/{origen_id}?error={msg}", status_code=303)
 
-    # Validación del cron.
+    from croniter import croniter
     try:
-        from croniter import croniter
-
         if not croniter.is_valid(cron):
-            return fail("La expresión de programación (cron) no es válida.")
+            return fail("cron-invalido")
     except Exception:  # noqa: BLE001
-        return fail("La expresión de programación (cron) no es válida.")
+        return fail("cron-invalido")
+
+    if validate_override(comando_rsync):
+        return fail("override-invalido")
 
     with session_scope() as session:
-        if not session.get(HostOrigen, host_id) or not session.get(Destino, destino_id):
-            return fail("Host o destino inválido.")
+        o = session.get(Origen, origen_id)
+        d = session.get(Destino, destino_id)
+        if not o or not d:
+            return fail("origen-o-destino-invalido")
         dup = session.scalar(
             select(Tarea).where(
-                Tarea.host_origen_id == host_id,
-                Tarea.destino_id == destino_id,
-                Tarea.carpeta_origen == carpeta_origen.strip(),
+                Tarea.origen_id == origen_id, Tarea.destino_id == destino_id, Tarea.tipo == tipo,
             )
         )
         if dup:
-            return fail("Ya existe una tarea para esa carpeta en ese destino.")
-        session.add(
-            Tarea(
-                host_origen_id=host_id,
-                destino_id=destino_id,
-                carpeta_origen=carpeta_origen.strip(),
-                tipo=tipo if tipo in TIPOS_TAREA else "espejo",
-                cron=cron.strip(),
-                retencion=max(1, retencion),
-                rsync_extra=rsync_extra or None,
-                comando_rsync=comando_rsync.strip() or None,
-            )
+            return fail("tarea-duplicada")
+        session.add(Tarea(
+            origen_id=origen_id,
+            destino_id=destino_id,
+            tipo=tipo if tipo in TIPOS_TAREA else "espejo",
+            cron=cron.strip(),
+            retencion_dias=max(1, retencion_dias),
+            rsync_extra=rsync_extra or None,
+            comando_rsync=comando_rsync.strip() or None,
+        ))
+    return RedirectResponse(f"/origenes/origen/{origen_id}", status_code=303)
+
+
+@router.post("/preview")
+async def preview(
+    origen_id: int = Form(...),
+    destino_id: int = Form(...),
+    tipo: str = Form("espejo"),
+    rsync_extra: str = Form(""),
+    _: int = Depends(require_login),
+):
+    with session_scope() as session:
+        o = session.get(Origen, origen_id)
+        d = session.get(Destino, destino_id)
+        if not o or not d:
+            return JSONResponse({"error": "Origen o destino inválido"}, status_code=400)
+        host = o.volumen.host_origen
+        conector = get_connector(host.tipo_conector)
+        ruta_origen, filtros = conector.fuente_rsync(o.tipo, o.ruta)
+        cmd = preview_command(
+            ruta_origen=ruta_origen, carpeta_base=d.carpeta_base, host_nombre=host.nombre,
+            volumen_nombre=o.volumen.nombre, origen_nombre=o.nombre, tipo=tipo,
+            destino_usuario=d.usuario, destino_host=d.host, destino_puerto=d.puerto,
+            extra_flags=rsync_extra or None, filtros=filtros,
         )
-    return RedirectResponse("/origenes", status_code=303)
+    return JSONResponse({"command": cmd})

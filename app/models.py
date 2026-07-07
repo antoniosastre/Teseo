@@ -1,4 +1,11 @@
-"""Modelos ORM (SQLAlchemy 2.0) — esquema de la base de datos de Teseo."""
+"""Modelos ORM (SQLAlchemy 2.0) — esquema de la base de datos de Teseo.
+
+Jerarquía de orígenes de copia:  Host → Volumen → Origen → (0..n) Tarea.
+El RAID es una propiedad del **volumen**; la ubicación física, del **host**.
+Un `Origen` es una unidad de datos respaldable que descubre un conector (una
+carpeta compartida o un *bundle* como la "Configuración" de Synology), y puede
+tener 0..n tareas de copia (espejo/incremental) a destinos iguales o distintos.
+"""
 from __future__ import annotations
 
 import datetime as dt
@@ -27,6 +34,9 @@ class Base(DeclarativeBase):
 
 AUTH_METHODS = ("key", "password")
 PROTECCIONES = ("single", "raid1", "raid2")  # disco único, raid 1 disco, raid 2 discos
+CONECTORES = ("synology", "plesk")            # tipos de conector de host (ver connectors/)
+TIPOS_ORIGEN = ("carpeta", "config")          # carpeta real | bundle sintético (@ de Synology)
+ESTADOS_ORIGEN = ("activo", "desaparecido")   # "desaparecido" => tareas huérfanas
 TIPOS_TAREA = ("espejo", "incremental")
 ESTADOS_TAREA = ("esperando", "en_progreso", "terminada", "fallida")
 ESTADOS_CONEXION = ("desconocido", "conectado", "inaccesible", "en_uso")
@@ -52,25 +62,92 @@ class Ubicacion(Base):
     nombre: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
 
 
+class Ajuste(Base):
+    """Ajustes globales editables desde la UI (clave -> valor)."""
+
+    __tablename__ = "ajustes"
+
+    clave: Mapped[str] = mapped_column(String(64), primary_key=True)
+    valor: Mapped[str] = mapped_column(String(255), nullable=False)
+
+
 class HostOrigen(Base):
     __tablename__ = "hosts_origen"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     nombre: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    tipo_conector: Mapped[str] = mapped_column(Enum(*CONECTORES), nullable=False)
     host: Mapped[str] = mapped_column(String(255), nullable=False)
     puerto: Mapped[int] = mapped_column(Integer, default=22)
     usuario: Mapped[str] = mapped_column(String(128), nullable=False)
     auth_method: Mapped[str] = mapped_column(Enum(*AUTH_METHODS), default="password")
     secret_cifrado: Mapped[Optional[str]] = mapped_column(Text)  # password o clave privada cifrada
-    host_key: Mapped[Optional[str]] = mapped_column(Text)        # known_hosts del origen
-    es_raid: Mapped[str] = mapped_column(Enum(*PROTECCIONES), default="single")
+    host_key: Mapped[Optional[str]] = mapped_column(Text)        # clave de host confiada (pinning)
     ubicacion_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ubicaciones.id"))
     estado_conexion: Mapped[str] = mapped_column(Enum(*ESTADOS_CONEXION), default="desconocido")
     last_check: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
 
     ubicacion: Mapped[Optional[Ubicacion]] = relationship()
-    tareas: Mapped[list["Tarea"]] = relationship(back_populates="host_origen", cascade="all, delete-orphan")
+    volumenes: Mapped[list["Volumen"]] = relationship(
+        back_populates="host_origen", cascade="all, delete-orphan"
+    )
+
+
+class Volumen(Base):
+    """Un volumen de un host (p. ej. volume1). El RAID se define aquí."""
+
+    __tablename__ = "volumenes"
+    __table_args__ = (UniqueConstraint("host_origen_id", "nombre", name="uq_volumen"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    host_origen_id: Mapped[int] = mapped_column(ForeignKey("hosts_origen.id"), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(64), nullable=False)  # "volume1"
+    proteccion: Mapped[str] = mapped_column(Enum(*PROTECCIONES), default="single")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
+
+    host_origen: Mapped[HostOrigen] = relationship(back_populates="volumenes")
+    origenes: Mapped[list["Origen"]] = relationship(
+        back_populates="volumen", cascade="all, delete-orphan"
+    )
+
+
+class Origen(Base):
+    """Un origen de copia (carpeta compartida o bundle) dentro de un volumen."""
+
+    __tablename__ = "origenes"
+    __table_args__ = (UniqueConstraint("volumen_id", "ruta", name="uq_origen"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    volumen_id: Mapped[int] = mapped_column(ForeignKey("volumenes.id"), nullable=False)
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)  # "Configuración", "web"
+    tipo: Mapped[str] = mapped_column(Enum(*TIPOS_ORIGEN), default="carpeta")
+    ruta: Mapped[str] = mapped_column(String(512), nullable=False)   # "/volume1/web"
+    tamano_bytes: Mapped[Optional[int]] = mapped_column(BigInteger)  # caché del último tamaño
+    last_size_check: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)
+    estado: Mapped[str] = mapped_column(Enum(*ESTADOS_ORIGEN), default="activo")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
+
+    volumen: Mapped[Volumen] = relationship(back_populates="origenes")
+    tareas: Mapped[list["Tarea"]] = relationship(
+        back_populates="origen", cascade="all, delete-orphan"
+    )
+    historicos: Mapped[list["HistoricoTamano"]] = relationship(
+        back_populates="origen", cascade="all, delete-orphan", order_by="HistoricoTamano.timestamp.desc()"
+    )
+
+
+class HistoricoTamano(Base):
+    """Serie temporal del tamaño de un origen (para análisis de evolución)."""
+
+    __tablename__ = "historico_tamano"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    origen_id: Mapped[int] = mapped_column(ForeignKey("origenes.id"), nullable=False)
+    timestamp: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
+    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+    origen: Mapped[Origen] = relationship(back_populates="historicos")
 
 
 class Destino(Base):
@@ -114,18 +191,17 @@ class SshKeypair(Base):
 class Tarea(Base):
     __tablename__ = "tareas"
     __table_args__ = (
-        UniqueConstraint("host_origen_id", "destino_id", "carpeta_origen", name="uq_tarea"),
+        UniqueConstraint("origen_id", "destino_id", "tipo", name="uq_tarea"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    host_origen_id: Mapped[int] = mapped_column(ForeignKey("hosts_origen.id"), nullable=False)
+    origen_id: Mapped[int] = mapped_column(ForeignKey("origenes.id"), nullable=False)
     destino_id: Mapped[int] = mapped_column(ForeignKey("destinos.id"), nullable=False)
-    carpeta_origen: Mapped[str] = mapped_column(String(512), nullable=False)
     tipo: Mapped[str] = mapped_column(Enum(*TIPOS_TAREA), default="espejo")
     cron: Mapped[str] = mapped_column(String(128), default="0 2 * * *")  # programación estilo cron
     comando_rsync: Mapped[Optional[str]] = mapped_column(Text)            # override editable
     rsync_extra: Mapped[Optional[str]] = mapped_column(Text)              # flags extra de usuario
-    retencion: Mapped[int] = mapped_column(Integer, default=7)            # nº de snapshots a conservar
+    retencion_dias: Mapped[int] = mapped_column(Integer, default=7)       # conservar snapshots N días
     estado: Mapped[str] = mapped_column(Enum(*ESTADOS_TAREA), default="esperando")
     porcentaje: Mapped[int] = mapped_column(Integer, default=0)
     run_now: Mapped[bool] = mapped_column(Boolean, default=False)         # bandera "ejecutar ya"
@@ -135,7 +211,7 @@ class Tarea(Base):
     ssh_keypair_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ssh_keypairs.id"))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
 
-    host_origen: Mapped[HostOrigen] = relationship(back_populates="tareas")
+    origen: Mapped[Origen] = relationship(back_populates="tareas")
     destino: Mapped[Destino] = relationship(back_populates="tareas")
     keypair: Mapped[Optional[SshKeypair]] = relationship()
     ejecuciones: Mapped[list["Ejecucion"]] = relationship(

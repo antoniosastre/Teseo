@@ -1,18 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Nuevo host{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Añadir host origen</h1><a href="/origenes" class="btn secondary">Volver</a></div>
+<div class="page-head"><h1>Añadir host de origen (1/2)</h1><a href="/origenes" class="btn secondary">Cancelar</a></div>
 {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
 
 <form method="post" action="/origenes/host" class="form-card">
   <fieldset>
-    <legend>Conexión SSH</legend>
+    <legend>Conector y conexión</legend>
     <label>Nombre único <input name="nombre" value="{{ form.nombre or '' }}" required></label>
+    <label>Tipo de conector
+      <select name="tipo_conector" required>
+        <option value="">— selecciona —</option>
+        {% for tipo, nombre in conectores %}
+        <option value="{{ tipo }}" {{ 'selected' if form.tipo_conector==tipo }}>{{ nombre }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <div class="grid2">
-      <label>Host <input name="host" value="{{ form.host or '' }}" required></label>
+      <label>Host (FQDN o IP) <input name="host" value="{{ form.host or '' }}" required></label>
       <label>Puerto <input name="puerto" type="number" value="{{ form.puerto or 22 }}"></label>
       <label>Usuario <input name="usuario" value="{{ form.usuario or '' }}" required></label>
-      <label>Método
+      <label>Método de autenticación
         <select name="auth_method">
           <option value="password" {{ 'selected' if form.auth_method=='password' }}>Contraseña</option>
           <option value="key" {{ 'selected' if form.auth_method=='key' }}>Clave SSH</option>
@@ -23,33 +31,7 @@
       <textarea name="secret" rows="2" placeholder="Se cifra antes de guardarse"></textarea>
     </label>
   </fieldset>
-
-  <fieldset>
-    <legend>Protección del origen</legend>
-    <div class="grid2">
-      <label>Nivel de protección
-        <select name="es_raid">
-          {% for p in protecciones %}
-          <option value="{{ p }}" {{ 'selected' if form.es_raid==p }}>
-            {{ {'single':'Disco único','raid1':'RAID (1 disco)','raid2':'RAID (2 discos)'}[p] }}
-          </option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>Ubicación física
-        <span class="inline-add">
-          <select name="ubicacion_id" id="ubicacion-select">
-            <option value="">— sin especificar —</option>
-            {% for u in ubicaciones %}
-            <option value="{{ u.id }}" {{ 'selected' if form.ubicacion_id==u.id|string }}>{{ u.nombre }}</option>
-            {% endfor %}
-          </select>
-          <button type="button" class="secondary" id="add-ubicacion">+ Nueva</button>
-        </span>
-      </label>
-    </div>
-  </fieldset>
-
-  <button type="submit" class="primary">Guardar host</button>
+  <p class="muted">Al continuar, el conector explorará el host para descubrir sus orígenes de copia.</p>
+  <button type="submit" class="primary">Siguiente: explorar →</button>
 </form>
 {% endblock %}
