@@ -32,7 +32,7 @@ def _fake_synology(fs: dict[str, list[str]]):
 def test_registro_incluye_synology_y_plesk():
     tipos = dict(conectores_disponibles())
     assert tipos["synology"] == "NAS Synology"
-    assert tipos["plesk"] == "Servidor Plesk"
+    assert tipos["plesk_linux"] == "Plesk (Linux)"
 
 
 def test_get_connector_desconocido():
@@ -92,9 +92,3 @@ def test_fuente_rsync_config_filtra_arroba():
     assert "--include=@*" in filtros and "--exclude=*" in filtros
     # Carpeta normal: sin filtros.
     assert SynologyConnector().fuente_rsync("carpeta", "/volume1/web") == ("/volume1/web", [])
-
-
-def test_plesk_es_stub():
-    plesk = get_connector("plesk")
-    with pytest.raises(NotImplementedError):
-        plesk.descubrir(lambda c: (0, "", ""))

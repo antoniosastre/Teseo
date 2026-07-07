@@ -9,7 +9,7 @@
     <legend>Conector y conexión</legend>
     <label>Nombre único <input name="nombre" value="{{ form.nombre or '' }}" required></label>
     <label>Tipo de conector
-      <select name="tipo_conector" required>
+      <select name="tipo_conector" id="tipo_conector-select" required>
         <option value="">— selecciona —</option>
         {% for tipo, nombre in conectores %}
         <option value="{{ tipo }}" {{ 'selected' if form.tipo_conector==tipo }}>{{ nombre }}</option>
@@ -31,6 +31,24 @@
       <textarea name="secret" rows="2" placeholder="Se cifra antes de guardarse"></textarea>
     </label>
   </fieldset>
+
+  {% for tipo, opts in opciones_por_conector.items() %}
+  {% if opts %}
+  <fieldset class="opciones-conector" data-conector="{{ tipo }}" hidden>
+    <legend>Opciones del conector</legend>
+    {% for o in opts %}
+      {% if o.tipo == 'checkbox' %}
+      <label class="check"><input type="checkbox" name="{{ o.clave }}"> {{ o.etiqueta }}</label>
+      {% else %}
+      <label>{{ o.etiqueta }}
+        <textarea name="{{ o.clave }}" rows="3" placeholder="/ruta/una-por-linea"></textarea>
+      </label>
+      {% endif %}
+    {% endfor %}
+  </fieldset>
+  {% endif %}
+  {% endfor %}
+
   <p class="muted">Al continuar, el conector explorará el host para descubrir sus orígenes de copia.</p>
   <button type="submit" class="primary">Siguiente: explorar →</button>
 </form>

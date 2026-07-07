@@ -10,6 +10,8 @@ protección, el estado de copia y los botones Configurar/Editar por origen.
 """
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import select
@@ -33,6 +35,7 @@ from app.services import (
     estado_copia,
     explorar_host,
     host_semaforo,
+    opciones_conector,
     origen_score_bar,
     ssh_target_for_host,
     ultima_copia_ok,
@@ -86,12 +89,23 @@ async def listar(request: Request, _: int = Depends(require_login)):
 
 # --- Wizard: pantalla 1 (alta + exploración) ---------------------------------
 
+def _opciones_por_conector() -> dict:
+    """{tipo: [ {clave, etiqueta, tipo}... ]} para pintar los campos del wizard."""
+    return {
+        tipo: [
+            {"clave": o.clave, "etiqueta": o.etiqueta, "tipo": o.tipo}
+            for o in get_connector(tipo).opciones_descubrimiento()
+        ]
+        for tipo, _ in conectores_disponibles()
+    }
+
+
 @router.get("/host/nuevo", response_class=HTMLResponse)
 async def host_form(request: Request, _: int = Depends(require_login)):
     return templates.TemplateResponse(
         "host_form.html",
         {"request": request, "active": "origenes", "conectores": conectores_disponibles(),
-         "error": None, "form": {}},
+         "opciones_por_conector": _opciones_por_conector(), "error": None, "form": {}},
     )
 
 
@@ -115,11 +129,20 @@ async def host_crear(
         return templates.TemplateResponse(
             "host_form.html",
             {"request": request, "active": "origenes", "conectores": conectores_disponibles(),
-             "error": msg, "form": form},
+             "opciones_por_conector": _opciones_por_conector(), "error": msg, "form": form},
         )
 
     if tipo_conector not in CONECTORES:
         return fail("Conector no válido.")
+
+    # Opciones de descubrimiento del conector elegido (checkboxes/textarea).
+    datos = await request.form()
+    opciones = {}
+    for opt in get_connector(tipo_conector).opciones_descubrimiento():
+        if opt.tipo == "checkbox":
+            opciones[opt.clave] = datos.get(opt.clave) is not None
+        else:
+            opciones[opt.clave] = datos.get(opt.clave, "")
 
     with session_scope() as session:
         if session.scalar(select(HostOrigen).where(HostOrigen.nombre == nombre.strip())):
@@ -132,6 +155,7 @@ async def host_crear(
             usuario=usuario.strip(),
             auth_method=auth_method if auth_method in ("key", "password") else "password",
             secret_cifrado=box.encrypt(secret),
+            conector_opciones=json.dumps(opciones),
         )
         session.add(host_obj)
         session.flush()
@@ -159,17 +183,22 @@ async def host_configurar_form(host_id: int, request: Request, _: int = Depends(
         if not h:
             return RedirectResponse("/origenes", status_code=303)
         volumenes = [
-            {"id": v.id, "nombre": v.nombre, "proteccion": v.proteccion,
-             "n_origenes": len(v.origenes)}
+            {"id": v.id, "nombre": v.nombre, "dispositivo": v.dispositivo,
+             "proteccion": v.proteccion, "n_origenes": len(v.origenes)}
             for v in sorted(h.volumenes, key=lambda v: v.nombre)
         ]
         ubicaciones = [{"id": u.id, "nombre": u.nombre}
                        for u in session.scalars(select(Ubicacion).order_by(Ubicacion.nombre))]
+        # Rutas adicionales indicadas que no se encontraron (no generaron origen).
+        rutas_pedidas = [ln.strip() for ln in
+                         str(opciones_conector(h).get("rutas_extra", "")).splitlines() if ln.strip()]
+        rutas_existentes = {o.ruta for v in h.volumenes for o in v.origenes}
+        rutas_faltantes = [r for r in rutas_pedidas if r not in rutas_existentes]
         data = {"id": h.id, "nombre": h.nombre, "ubicacion_id": h.ubicacion_id}
     return templates.TemplateResponse(
         "host_config.html",
-        {"request": request, "active": "origenes", "host": data,
-         "volumenes": volumenes, "ubicaciones": ubicaciones, "protecciones": PROTECCIONES},
+        {"request": request, "active": "origenes", "host": data, "volumenes": volumenes,
+         "ubicaciones": ubicaciones, "protecciones": PROTECCIONES, "rutas_faltantes": rutas_faltantes},
     )
 
 

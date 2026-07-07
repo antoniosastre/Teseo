@@ -111,6 +111,20 @@
     });
   }
 
+  // --- Opciones del conector en el alta de host (mostrar según el elegido) ---
+  var conectorSel = document.getElementById("tipo_conector-select");
+  if (conectorSel) {
+    var toggleOpciones = function () {
+      document.querySelectorAll(".opciones-conector").forEach(function (bloque) {
+        var coincide = bloque.getAttribute("data-conector") === conectorSel.value;
+        if (coincide) bloque.removeAttribute("hidden");
+        else bloque.setAttribute("hidden", "");
+      });
+    };
+    conectorSel.addEventListener("change", toggleOpciones);
+    toggleOpciones();
+  }
+
   // --- Estado en vivo por SSE (orígenes / destinos) ---
   if (document.querySelector("[data-tarea-bar], [data-host], [data-destino]")) {
     try {
