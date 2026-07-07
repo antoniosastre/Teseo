@@ -120,8 +120,15 @@ async def probar(destino_id: int, _: int = Depends(require_login)):
         d = session.get(Destino, destino_id)
         if not d:
             return JSONResponse({"ok": False, "message": "No existe"}, status_code=404)
-        target = SshTarget(d.host, d.puerto, d.usuario, d.auth_method, box.decrypt(d.secret_cifrado))
-    ok, message = test_connection(target)
+        target = SshTarget(d.host, d.puerto, d.usuario, d.auth_method,
+                           box.decrypt(d.secret_cifrado), host_key=d.host_key)
+    ok, message, learned = test_connection(target)
+    # Primer uso: fijamos (pinning) la clave de host aprendida.
+    if learned:
+        with session_scope() as session:
+            d = session.get(Destino, destino_id)
+            if d and not d.host_key:
+                d.host_key = learned
     return JSONResponse({"ok": ok, "message": message})
 
 

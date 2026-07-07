@@ -14,6 +14,8 @@ name = teseo
 ; Claves generadas con cryptography.fernet.generate_key() durante la instalación.
 secret_key = CLAVE_DE_SESION_WEB
 encryption_key = CLAVE_FERNET_PARA_CIFRAR_SECRETOS
+; En producción tras TLS, ponlo a true para que la cookie de sesión sea Secure.
+https_only = false
 
 [smtp]
 ; Opcional: avisos por email ante fallos / orígenes inaccesibles.

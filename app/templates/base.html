@@ -17,7 +17,9 @@
   </nav>
   <div class="user">
     <span>{{ request.session.get('admin_user') }}</span>
-    <a href="/logout" class="logout">Salir</a>
+    <form action="/logout" method="post" class="logout-form">
+      <button type="submit" class="logout">Salir</button>
+    </form>
   </div>
 </header>
 {% endif %}

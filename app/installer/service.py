@@ -5,6 +5,8 @@ de configuración y da de alta el primer administrador.
 """
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import create_engine, text
 
 from app.config import DatabaseConfig, SmtpConfig, write_config
@@ -21,11 +23,23 @@ def test_connection(db: DatabaseConfig) -> tuple[bool, str]:
             conn.execute(text("SELECT 1"))
         engine.dispose()
         return True, "Conexión correcta."
-    except Exception as exc:  # noqa: BLE001 - mostramos el error al usuario
-        return False, f"No se pudo conectar: {exc}"
+    except Exception as exc:  # noqa: BLE001 - el operador necesita una pista para corregir
+        # Acotamos el mensaje: útil para el operador, sin volcar repr/URLs completas.
+        detalle = str(exc).splitlines()[0][:200] if str(exc) else type(exc).__name__
+        return False, f"No se pudo conectar: {detalle}"
+
+
+# El nombre de BD no puede parametrizarse en DDL, así que lo interpolamos entre
+# backticks; validamos que sea un identificador seguro para evitar inyección SQL.
+_DB_NAME_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 
 
 def create_database(db: DatabaseConfig) -> None:
+    if not _DB_NAME_RE.match(db.name):
+        raise ValueError(
+            "El nombre de la base de datos sólo puede contener letras, dígitos y "
+            "guiones bajos (máx. 64 caracteres)."
+        )
     engine = create_engine(db.server_url())
     with engine.connect() as conn:
         conn.execute(

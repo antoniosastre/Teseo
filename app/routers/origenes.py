@@ -209,6 +209,7 @@ async def host_test(host_id: int, _: int = Depends(require_login)):
             return JSONResponse({"ok": False, "message": "No existe"}, status_code=404)
         target = ssh_target_for_host(h, box)
     ok, message, learned = test_connection(target)
+    # Primer uso: fijamos (pinning) la clave de host aprendida para futuras conexiones.
     if learned:
         with session_scope() as session:
             h = session.get(HostOrigen, host_id)
@@ -271,6 +272,12 @@ async def tarea_crear(
 
     if validate_override(comando_rsync):
         return fail("override-invalido")
+
+    # Validación del override manual (si lo hay): debe ser una invocación rsync
+    # sin metacaracteres de shell (evita inyección de comandos en el origen).
+    override_error = validate_override(comando_rsync)
+    if override_error:
+        return fail(override_error)
 
     with session_scope() as session:
         o = session.get(Origen, origen_id)

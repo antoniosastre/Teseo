@@ -21,17 +21,23 @@ from dataclasses import dataclass
 BASE_FLAGS = ["-a", "-z", "--info=progress2", "--stats"]
 
 
-# Metacaracteres de shell que permitirían encadenar/inyectar comandos en un
-# override manual. Un override debe ser UNA invocación de rsync.
+# override. Un override es un "modo experto": debe ser UNA invocación de rsync,
+# nunca una tubería, subshell ni redirección.
 _SHELL_METACHARS = (";", "|", "&", "`", "$(", ">", "<", "\n", "\r")
 
 
 def validate_override(comando: str) -> str | None:
-    """Valida el override manual de comando rsync. Devuelve mensaje de error o None."""
+    """Valida el override manual de comando. Devuelve mensaje de error o None.
+
+    Reglas: debe empezar por ``rsync`` y no contener metacaracteres de shell que
+    permitan encadenar comandos. No neutraliza los vectores propios de rsync
+    (``-e``/``--rsync-path``), que quedan como riesgo aceptado del modo experto.
+    """
     cmd = comando.strip()
     if not cmd:
         return None
-    if cmd.split()[0] != "rsync":
+    tokens = cmd.split()
+    if tokens[0] != "rsync":
         return "El comando personalizado debe empezar por 'rsync'."
     if any(mc in cmd for mc in _SHELL_METACHARS):
         return "El comando personalizado no puede contener ; | & ` $( > < ni saltos de línea."

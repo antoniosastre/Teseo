@@ -26,7 +26,9 @@ def create_app() -> FastAPI:
     # Clave de sesión: de la config si existe, si no, una efímera (solo instalador).
     config = load_config()
     secret_key = config.secret_key if config and config.secret_key else "teseo-setup-ephemeral-key"
-    app.add_middleware(SessionMiddleware, secret_key=secret_key, https_only=False)
+    # En producción (tras TLS) config.https_only=true marca la cookie como Secure.
+    https_only = bool(config and config.https_only)
+    app.add_middleware(SessionMiddleware, secret_key=secret_key, https_only=https_only)
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
