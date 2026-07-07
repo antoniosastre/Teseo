@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 
 from app.crypto import SecretBox
 from app.models import Destino, HostOrigen, Origen, Tarea, Volumen
@@ -120,9 +121,11 @@ def persistir_descubrimiento(session, host: HostOrigen, volumenes: list[VolumenD
     for vd in volumenes:
         vol = vol_por_nombre.get(vd.nombre)
         if vol is None:
-            vol = Volumen(nombre=vd.nombre)
+            vol = Volumen(nombre=vd.nombre, dispositivo=vd.dispositivo)
             host.volumenes.append(vol)   # mantiene la colección en memoria coherente
             vol_por_nombre[vd.nombre] = vol
+        elif vd.dispositivo:
+            vol.dispositivo = vd.dispositivo
         org_por_ruta = {o.ruta: o for o in vol.origenes}
         for od in vd.origenes:
             org = org_por_ruta.get(od.ruta)
@@ -141,15 +144,26 @@ def persistir_descubrimiento(session, host: HostOrigen, volumenes: list[VolumenD
     session.flush()
 
 
+def opciones_conector(host: HostOrigen) -> dict:
+    """Opciones de descubrimiento persistidas en el host (JSON) como dict."""
+    if not host.conector_opciones:
+        return {}
+    try:
+        return json.loads(host.conector_opciones)
+    except (ValueError, TypeError):
+        return {}
+
+
 def explorar_host(session, host: HostOrigen, box: SecretBox) -> None:
     """Conecta al host, ejecuta el conector y persiste los orígenes descubiertos."""
     conector = get_connector(host.tipo_conector)
+    opciones = opciones_conector(host)
     target = ssh_target_for_host(host, box)
     with connect(target) as client:
         def ejecutar(cmd: str):
             return run(client, cmd)
 
-        volumenes = conector.descubrir(ejecutar)
+        volumenes = conector.descubrir(ejecutar, opciones)
     persistir_descubrimiento(session, host, volumenes)
 
 

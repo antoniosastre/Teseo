@@ -132,7 +132,7 @@ def test_persistir_descubrimiento_crea_y_marca_huerfanos(client):
         s.flush()
         # Primer descubrimiento: volume1 con "Configuración" y "web".
         persistir_descubrimiento(s, host, [
-            VolumenDescubierto("volume1", [
+            VolumenDescubierto("volume1", origenes=[
                 OrigenDescubierto("Configuración", "config", "/volume1"),
                 OrigenDescubierto("web", "carpeta", "/volume1/web"),
             ])
@@ -142,7 +142,7 @@ def test_persistir_descubrimiento_crea_y_marca_huerfanos(client):
 
         # Segundo descubrimiento: "web" ha desaparecido.
         persistir_descubrimiento(s, host, [
-            VolumenDescubierto("volume1", [
+            VolumenDescubierto("volume1", origenes=[
                 OrigenDescubierto("Configuración", "config", "/volume1"),
             ])
         ])

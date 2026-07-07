@@ -34,7 +34,7 @@ class Base(DeclarativeBase):
 
 AUTH_METHODS = ("key", "password")
 PROTECCIONES = ("single", "raid1", "raid2")  # disco único, raid 1 disco, raid 2 discos
-CONECTORES = ("synology", "plesk")            # tipos de conector de host (ver connectors/)
+CONECTORES = ("synology", "plesk_linux")      # tipos de conector de host (ver connectors/)
 TIPOS_ORIGEN = ("carpeta", "config")          # carpeta real | bundle sintético (@ de Synology)
 ESTADOS_ORIGEN = ("activo", "desaparecido")   # "desaparecido" => tareas huérfanas
 TIPOS_TAREA = ("espejo", "incremental")
@@ -83,6 +83,7 @@ class HostOrigen(Base):
     auth_method: Mapped[str] = mapped_column(Enum(*AUTH_METHODS), default="password")
     secret_cifrado: Mapped[Optional[str]] = mapped_column(Text)  # password o clave privada cifrada
     host_key: Mapped[Optional[str]] = mapped_column(Text)        # clave de host confiada (pinning)
+    conector_opciones: Mapped[Optional[str]] = mapped_column(Text)  # opciones de descubrimiento (JSON)
     ubicacion_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ubicaciones.id"))
     estado_conexion: Mapped[str] = mapped_column(Enum(*ESTADOS_CONEXION), default="desconocido")
     last_check: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)
@@ -102,7 +103,8 @@ class Volumen(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     host_origen_id: Mapped[int] = mapped_column(ForeignKey("hosts_origen.id"), nullable=False)
-    nombre: Mapped[str] = mapped_column(String(64), nullable=False)  # "volume1"
+    nombre: Mapped[str] = mapped_column(String(128), nullable=False)  # "volume1" o punto de montaje "/var/www"
+    dispositivo: Mapped[Optional[str]] = mapped_column(String(128))   # dispositivo del montaje (p. ej. /dev/md4)
     proteccion: Mapped[str] = mapped_column(Enum(*PROTECCIONES), default="single")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, server_default=func.now())
 

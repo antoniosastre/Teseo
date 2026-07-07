@@ -20,7 +20,7 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass
 
-from connectors import Ejecutar, OrigenDescubierto, VolumenDescubierto
+from connectors import Ejecutar, OpcionDescubrimiento, OrigenDescubierto, VolumenDescubierto
 
 # Límite de volúmenes a explorar: cota de seguridad ante respuestas inesperadas.
 _MAX_VOLUMENES = 64
@@ -74,7 +74,10 @@ class SynologyConnector:
     TIPO = "synology"
     NOMBRE = "NAS Synology"
 
-    def descubrir(self, ejecutar: Ejecutar) -> list[VolumenDescubierto]:
+    def opciones_descubrimiento(self) -> list[OpcionDescubrimiento]:
+        return []
+
+    def descubrir(self, ejecutar: Ejecutar, opciones: dict | None = None) -> list[VolumenDescubierto]:
         volumenes: list[VolumenDescubierto] = []
         for i in range(1, _MAX_VOLUMENES + 1):
             vol = f"/volume{i}"

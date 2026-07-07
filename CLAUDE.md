@@ -89,7 +89,7 @@ app/                      # Web FastAPI + Jinja
   installer/              # asistente /install (service.py: test_connection, create_database, run_install)
   routers/               # dashboard, auth, ubicaciones, destinos, origenes (wizard+jerarquía), tareas, estado (SSE), ajustes
   templates/ static/      # Jinja + style.css + app.js (SSE, probar conexión, alta inline)
-connectors/               # estrategia por dispositivo: __init__ (interfaz+registro), synology.py (reglas), plesk.py (stub)
+connectors/               # estrategia por dispositivo: __init__ (interfaz+registro+opciones), synology.py, plesk.py (Plesk Linux: psa.conf→mount-points)
 daemon/                   # Servicio teseod
   teseod.py               # bucle scheduler (clase Daemon), concurrencia MAX_CONCURRENCY=3, monitor cada 300s
   keyprov.py              # ensure_trust(): genera/instala/valida claves SSH origen→destino
@@ -115,9 +115,9 @@ Jerarquía de orígenes: **Host → Volumen → Origen → (0..n) Tarea**. El RA
 - **admins**(username único, password_hash argon2, email)
 - **ubicaciones**(nombre único) — ubicación física del host, para puntuar protección
 - **ajustes**(clave PK, valor) — ajustes globales editables (p. ej. intervalo del analizador)
-- **hosts_origen**(nombre único, tipo_conector synology|plesk, host, puerto, usuario,
-  auth_method, secret_cifrado, host_key, ubicacion_id, estado_conexion)
-- **volumenes**(host_origen_id, nombre, proteccion single|raid1|raid2) — UNIQUE(host,nombre)
+- **hosts_origen**(nombre único, tipo_conector synology|plesk_linux, host, puerto, usuario,
+  auth_method, secret_cifrado, host_key, conector_opciones (JSON), ubicacion_id, estado_conexion)
+- **volumenes**(host_origen_id, nombre [volumeN o punto de montaje], dispositivo, proteccion) — UNIQUE(host,nombre)
 - **origenes**(volumen_id, nombre, tipo carpeta|config, ruta, tamano_bytes, last_size_check,
   estado activo|desaparecido) — UNIQUE(volumen,ruta). "desaparecido" ⇒ tareas huérfanas
 - **historico_tamano**(origen_id, timestamp, bytes) — serie temporal del tamaño
@@ -196,8 +196,14 @@ pytest -q          # 14 tests, SQLite en memoria
    huérfanos (email `notify_orphan`). Intervalo en tabla `ajustes` (sección UI /ajustes),
    disparable manual (bandera `analizador_run_now`). CRUD de ubicaciones en /ajustes.
    El daemon lo dispara en `teseod._maybe_analisis`.
-4. PENDIENTE: reglas del **conector Plesk**; analizador de **evolución** del tamaño a partir
-   del histórico. Mejoras varias: múltiples admins UI, cancelación de copias, paginación.
+4. ~~Conector Plesk~~ **HECHO** (rama `claude/conector-plesk`): `PleskLinuxConnector` lee
+   psa.conf, agrupa orígenes por punto de montaje (cada mount = un volumen con su RAID),
+   crea "Configuración Plesk"/"Configuración vhosts", un origen por suscripción
+   (`plesk bin subscription --list`), y correo/dumps/backups/rutas-extra según opciones.
+   El framework gana `opciones_descubrimiento()` (wizard dinámico) y `HostOrigen.conector_opciones`
+   (persistidas para la re-exploración). BD nunca se copia en vivo: se respaldan dumps externos.
+5. PENDIENTE: analizador de **evolución** del tamaño a partir del histórico. Mejoras varias:
+   múltiples admins UI, cancelación de copias, paginación.
 
 ---
 

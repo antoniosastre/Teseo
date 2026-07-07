@@ -37,10 +37,26 @@ class OrigenDescubierto:
 
 @dataclass
 class VolumenDescubierto:
-    """Un volumen del host con los orígenes que contiene."""
+    """Un volumen del host con los orígenes que contiene.
 
-    nombre: str                                  # p. ej. "volume1"
+    ``nombre`` identifica el volumen de forma estable (p. ej. "volume1" en
+    Synology o el punto de montaje "/var/www" en Plesk). ``dispositivo`` es
+    informativo (p. ej. "/dev/md4") para mostrarlo al asignar la protección.
+    """
+
+    nombre: str
+    dispositivo: str | None = None
     origenes: list[OrigenDescubierto] = field(default_factory=list)
+
+
+@dataclass
+class OpcionDescubrimiento:
+    """Campo extra que un conector pide en la 1ª pantalla del wizard."""
+
+    clave: str             # nombre del campo en el formulario
+    etiqueta: str          # texto visible
+    tipo: str              # "checkbox" | "textarea"
+    default: str = ""
 
 
 class Connector(Protocol):
@@ -49,8 +65,16 @@ class Connector(Protocol):
     TIPO: str      # identificador estable, guardado en BD (p. ej. "synology")
     NOMBRE: str    # etiqueta legible para la UI (p. ej. "NAS Synology")
 
-    def descubrir(self, ejecutar: Ejecutar) -> list[VolumenDescubierto]:
-        """Explora el host y devuelve sus volúmenes y orígenes de copia."""
+    def opciones_descubrimiento(self) -> list[OpcionDescubrimiento]:
+        """Campos extra que el conector pide en la 1ª pantalla del wizard."""
+        ...
+
+    def descubrir(self, ejecutar: Ejecutar, opciones: dict) -> list[VolumenDescubierto]:
+        """Explora el host y devuelve sus volúmenes y orígenes de copia.
+
+        ``opciones`` son los valores de ``opciones_descubrimiento()`` elegidos por
+        el usuario (persistidos en el host para que la re-exploración sea coherente).
+        """
         ...
 
     def fuente_rsync(self, tipo_origen: str, ruta: str) -> tuple[str, list[str]]:
@@ -89,8 +113,8 @@ def conectores_disponibles() -> list[tuple[str, str]]:
 
 
 # Registro de los conectores incluidos. El import al final evita ciclos.
-from connectors.plesk import PleskConnector  # noqa: E402
+from connectors.plesk import PleskLinuxConnector  # noqa: E402
 from connectors.synology import SynologyConnector  # noqa: E402
 
 registrar(SynologyConnector())
-registrar(PleskConnector())
+registrar(PleskLinuxConnector())
