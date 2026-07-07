@@ -1,0 +1,4 @@
+# Los scripts de shell y las unidades systemd deben usar saltos de línea LF
+# aunque se editen en Windows (si no, el shebang/ejecución falla en el servidor).
+*.sh   text eol=lf
+*.service text eol=lf

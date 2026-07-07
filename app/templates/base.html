@@ -9,7 +9,7 @@
 <body>
 {% if request.session.get('admin_id') %}
 <header class="topbar">
-  <div class="brand">🛰️ Teseo</div>
+  <div class="brand">🛰️ Teseo <span class="ver">v{{ version }}</span></div>
   <nav>
     <a href="/" class="{{ 'active' if active=='dashboard' }}">Panel</a>
     <a href="/origenes" class="{{ 'active' if active=='origenes' }}">Orígenes</a>
