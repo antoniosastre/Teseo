@@ -83,10 +83,11 @@ app/                      # Web FastAPI + Jinja
   deps.py                 # require_login (lanza RedirectException), get_secret_box()
   templating.py           # Jinja2Templates + filtros human_bytes / datetime_fmt
   services.py             # ssh_target_*, host_semaforo(), origen_score_bar(), estado_copia(), ultima_copia_ok(), explorar_host()/persistir_descubrimiento()
+  settings.py             # ajustes globales (tabla ajustes): intervalo del analizador, bandera run_now
   rsync_cmd.py            # build_plan()/preview_command()/validate_override(): comando rsync, layout, filtros del conector
   remote.py               # paramiko: connect() (pinning host_key), run(), test_connection(), disk_usage()
   installer/              # asistente /install (service.py: test_connection, create_database, run_install)
-  routers/               # dashboard, auth, ubicaciones, destinos, origenes (wizard+jerarquía), tareas, estado (SSE)
+  routers/               # dashboard, auth, ubicaciones, destinos, origenes (wizard+jerarquía), tareas, estado (SSE), ajustes
   templates/ static/      # Jinja + style.css + app.js (SSE, probar conexión, alta inline)
 connectors/               # estrategia por dispositivo: __init__ (interfaz+registro), synology.py (reglas), plesk.py (stub)
 daemon/                   # Servicio teseod
@@ -95,7 +96,8 @@ daemon/                   # Servicio teseod
   runner.py               # run_tarea(): rsync con streaming de progreso; usa el conector para fuente+filtros
   retention.py            # set_current_symlink(), apply_retention() (por DÍAS)
   monitor.py              # check_destinos() (df/du), check_origenes() (accesibilidad + aprende host_key)
-  notify.py               # email SMTP (notify_failure, notify_unreachable)
+  analyzer.py             # run_analisis(): re-exploración (huérfanos+email) + refresco de tamaños (du+histórico)
+  notify.py               # email SMTP (notify_failure, notify_unreachable, notify_orphan)
 scoring/__init__.py       # origen_score()/score_bar()/classify(): fórmula por origen + barra gráfica
 migrations/schema.sql     # esquema de referencia (DESACTUALIZADO; la verdad es create_all sobre models.py)
 deploy/                   # teseo-web.service, teseod.service (systemd)
@@ -186,15 +188,16 @@ pytest -q          # 14 tests, SQLite en memoria
    "mejor copia") + `score_bar()`; lo consume `app/services.py:origen_score_bar()`. Máx. 6:
    RAID volumen (raid1+1/raid2+2) + tiene copia (+1) + RAID destino (raid1+1/raid2+2) +
    ubicación distinta (+1). UI: barra gráfica no numérica (0 rojo 10% → 6 azul 100%).
-2. **Rediseño de orígenes por conectores** — núcleo, wizard y vista HECHOS (rama
-   `claude/rediseno-origenes-nucleo`): modelo Host→Volumen→Origen→Tarea, `connectors/`
-   (Synology completo, Plesk stub), wizard de 2 pantallas, vista jerárquica, retención por días.
-   PENDIENTE en fases siguientes: **analizador periódico** (refresco de tamaño con `du` +
-   `historico_tamano`, re-exploración, detección de huérfanas + email; intervalo en tabla
-   `ajustes`, disparable manual), **CRUD de ubicaciones** en Ajustes, cálculo real de tamaño
-   por `du`, y las reglas del **conector Plesk**.
-3. Mejoras varias: múltiples admins UI, cancelación de copias en curso, paginación del
-   historial. (CI con pytest ya existe en rama aparte.)
+2. ~~Rediseño de orígenes por conectores~~ **HECHO** (PR #5): modelo Host→Volumen→Origen→Tarea,
+   `connectors/` (Synology completo, Plesk stub), wizard de 2 pantallas, vista jerárquica,
+   retención por días.
+3. ~~Analizador + tamaño~~ **HECHO** (rama `claude/analizador-tamano`): `daemon/analyzer.py`
+   (`run_analisis`) refresca tamaños con `du` + `historico_tamano`, re-explora y detecta
+   huérfanos (email `notify_orphan`). Intervalo en tabla `ajustes` (sección UI /ajustes),
+   disparable manual (bandera `analizador_run_now`). CRUD de ubicaciones en /ajustes.
+   El daemon lo dispara en `teseod._maybe_analisis`.
+4. PENDIENTE: reglas del **conector Plesk**; analizador de **evolución** del tamaño a partir
+   del histórico. Mejoras varias: múltiples admins UI, cancelación de copias, paginación.
 
 ---
 

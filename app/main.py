@@ -61,6 +61,7 @@ def create_app() -> FastAPI:
     from app.routers.tareas import router as tareas_router
     from app.routers.estado import router as estado_router
     from app.routers.ubicaciones import router as ubicaciones_router
+    from app.routers.ajustes import router as ajustes_router
 
     app.include_router(installer_router)
     app.include_router(auth_router)
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(tareas_router)
     app.include_router(estado_router)
     app.include_router(ubicaciones_router)
+    app.include_router(ajustes_router)
 
     return app
 

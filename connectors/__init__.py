@@ -61,6 +61,10 @@ class Connector(Protocol):
         """
         ...
 
+    def medir_tamano(self, ejecutar: Ejecutar, tipo_origen: str, ruta: str) -> int | None:
+        """Mide el tamaño en bytes del origen (``du``). Devuelve None si falla."""
+        ...
+
 
 # --- Registro de conectores --------------------------------------------------
 

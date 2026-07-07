@@ -14,6 +14,7 @@
     <a href="/" class="{{ 'active' if active=='dashboard' }}">Panel</a>
     <a href="/origenes" class="{{ 'active' if active=='origenes' }}">Orígenes</a>
     <a href="/destinos" class="{{ 'active' if active=='destinos' }}">Destinos</a>
+    <a href="/ajustes" class="{{ 'active' if active=='ajustes' }}">Ajustes</a>
   </nav>
   <div class="user">
     <span>{{ request.session.get('admin_user') }}</span>
