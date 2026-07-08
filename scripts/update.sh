@@ -35,7 +35,19 @@ echo "==> Instalando dependencias"
 echo "==> Aplicando migraciones de esquema (alembic upgrade head)"
 .venv/bin/alembic upgrade head
 
-echo "==> Reiniciando servicios"
-sudo systemctl restart teseo-web teseod
+VERSION_DESPLEGADA="$(cat VERSION)"
 
-echo "==> Listo. Versión desplegada: $(cat VERSION)"
+# Reinicio de servicios. Requiere sudo; el usuario de servicio 'teseo' NO debe
+# tener sudo general. Si no hay sudo sin contraseña disponible, no abortamos con
+# el error críptico de sudo: avisamos con la orden exacta a ejecutar a mano
+# (o configura el sudoers acotado que se describe en docs/DESPLIEGUE.md).
+echo "==> Reiniciando servicios"
+if sudo -n systemctl restart teseo-web teseod 2>/dev/null; then
+  echo "==> Servicios reiniciados."
+else
+  echo "!! No se pudieron reiniciar automáticamente (falta sudo sin contraseña)."
+  echo "   Remátalo a mano con un usuario con sudo:"
+  echo "       sudo systemctl restart teseo-web teseod"
+fi
+
+echo "==> Listo. Versión desplegada: $VERSION_DESPLEGADA"

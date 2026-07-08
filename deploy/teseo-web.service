@@ -8,7 +8,14 @@ User=teseo
 Group=teseo
 WorkingDirectory=/opt/teseo
 Environment=TESEO_CONFIG=/etc/teseo/config.ini
-ExecStart=/opt/teseo/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
+# Interfaz/puerto de escucha. Por defecto solo loopback (acceso vía túnel SSH o
+# nginx delante). Para exponer en la LAN: `systemctl edit teseo-web` y añade
+#   [Service]
+#   Environment=TESEO_WEB_HOST=0.0.0.0
+# (sirve HTTP plano: úsalo solo en red de confianza; en producción, nginx+TLS).
+Environment=TESEO_WEB_HOST=127.0.0.1
+Environment=TESEO_WEB_PORT=8080
+ExecStart=/opt/teseo/.venv/bin/uvicorn app.main:app --host ${TESEO_WEB_HOST} --port ${TESEO_WEB_PORT}
 Restart=on-failure
 RestartSec=5
 
