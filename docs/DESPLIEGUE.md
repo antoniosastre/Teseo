@@ -150,6 +150,20 @@ sudo -u teseo TESEO_CONFIG=/etc/teseo/config.ini scripts/update.sh v0.2.0   # ve
 `update.sh` hace `git fetch`, `checkout` del tag, reinstala dependencias, aplica las
 **migraciones** de esquema (`alembic upgrade head`) y reinicia los servicios.
 
+> **Reinicio sin sudo.** El usuario de servicio `teseo` no tiene (ni debe tener) sudo
+> general, así que el paso de reinicio no se ejecutará al correr el script como `teseo`;
+> el script lo detecta y te indica la orden a lanzar a mano:
+> `sudo systemctl restart teseo-web teseod`.
+>
+> Para que `update.sh` reinicie **desatendido**, da a `teseo` permiso acotado SOLO para
+> esas dos unidades con un fichero sudoers (`sudo visudo -f /etc/sudoers.d/teseo`):
+>
+> ```
+> teseo ALL=(root) NOPASSWD: /usr/bin/systemctl restart teseo-web teseod
+> ```
+>
+> Así el script corre entero de un tirón sin conceder sudo general al usuario de servicio.
+
 ### Migraciones de esquema (Alembic)
 
 - El **esquema inicial** lo crea el asistente de instalación (`create_all`). Alembic
