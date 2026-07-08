@@ -74,10 +74,17 @@ class RsyncPlan:
 
 
 def ssh_transport(destino_puerto: int, key_path: str | None) -> str:
-    """Cadena del transporte para rsync (-e), con puerto y clave opcionales."""
-    parts = ["ssh", "-p", str(destino_puerto), "-o", "StrictHostKeyChecking=accept-new"]
+    """Cadena del transporte para rsync (-e), con puerto y clave opcionales.
+
+    ``BatchMode=yes`` impide que el ssh interno degrade a contraseña/keyboard-interactive
+    (sin terminal fallaría con un confuso "Permission denied, please try again."); con
+    clave se fija ``IdentitiesOnly=yes`` para ofrecer SOLO esa clave (no agotar MaxAuthTries
+    con claves por defecto ni del agente).
+    """
+    parts = ["ssh", "-p", str(destino_puerto),
+             "-o", "StrictHostKeyChecking=accept-new", "-o", "BatchMode=yes"]
     if key_path:
-        parts += ["-i", key_path]
+        parts += ["-i", key_path, "-o", "IdentitiesOnly=yes"]
     return " ".join(parts)
 
 
