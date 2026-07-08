@@ -17,7 +17,8 @@ from app.services import host_semaforo
 def _snapshot() -> dict:
     with session_scope() as session:
         tareas = {
-            t.id: {"estado": t.estado, "porcentaje": t.porcentaje}
+            t.id: {"estado": t.estado, "porcentaje": t.porcentaje,
+                   "cancelando": t.cancel_requested}
             for t in session.scalars(select(Tarea))
         }
         hosts = {
@@ -32,7 +33,9 @@ router = APIRouter(prefix="/estado")
 
 @router.get("/json")
 async def estado_json(_: int = Depends(require_login)):
-    return JSONResponse(_snapshot())
+    # to_thread: la consulta a BD es síncrona; fuera del event loop para no
+    # congelar el resto de peticiones (incluidos los streams SSE) si BD se atasca.
+    return JSONResponse(await asyncio.to_thread(_snapshot))
 
 
 @router.get("/stream")
@@ -43,7 +46,7 @@ async def estado_stream(request: Request, _: int = Depends(require_login)):
         while True:
             if await request.is_disconnected():
                 break
-            payload = json.dumps(_snapshot())
+            payload = json.dumps(await asyncio.to_thread(_snapshot))
             yield f"data: {payload}\n\n"
             await asyncio.sleep(2)
 

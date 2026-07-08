@@ -128,6 +128,42 @@ def test_cancelar_marca_bandera_solo_en_progreso(auth_client):
     assert r.status_code == 303
     with session_scope() as s:
         assert s.query(Tarea).first().cancel_requested is True
+    # El estado en vivo expone la bandera para que la UI muestre "cancelando…".
+    j = auth_client.get("/estado/json").json()
+    assert j["tareas"][str(tid)]["cancelando"] is True
+    # Y la página de la tarea la refleja ya en el render inicial.
+    assert "cancelando…" in auth_client.get(f"/tareas/{tid}").text
+
+
+def test_finalize_cancelada_vuelve_a_esperando(auth_client):
+    """Cancelar es deliberado: la tarea vuelve a 'esperando', no queda 'fallida'."""
+    import datetime as dt
+
+    from app.models import Ejecucion
+    from daemon.runner import _finalize
+
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    with session_scope() as s:
+        t = s.query(Tarea).first()
+        tid = t.id
+        t.estado = "en_progreso"
+        t.porcentaje = 43
+        t.cancel_requested = True
+        e = Ejecucion(tarea_id=tid, inicio=dt.datetime.now())
+        s.add(e)
+        s.flush()
+        eid = e.id
+    _finalize(tid, eid, "cancelada", "Copia cancelada por el usuario.", None, None, "0 2 * * *")
+    with session_scope() as s:
+        t = s.query(Tarea).first()
+        assert t.estado == "esperando" and t.porcentaje == 0
+        assert t.cancel_requested is False          # bandera consumida
+        assert t.next_run_at is not None            # vuelve a la cola
+        e = s.query(Ejecucion).first()
+        assert e.resultado == "cancelada" and e.resumen == "Copia cancelada."
 
 
 def test_dashboard_lista_todas_las_tareas(auth_client):

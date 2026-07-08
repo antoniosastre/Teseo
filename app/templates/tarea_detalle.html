@@ -14,7 +14,11 @@
     <div><strong>Programación:</strong> <code>{{ tarea.cron }}</code></div>
     <div><strong>Retención:</strong> {{ tarea.retencion_dias }} días</div>
     <div><strong>Estado:</strong>
+      {% if tarea.cancelando %}
+      <span class="badge estado-cancelando" data-tarea-estado="{{ tarea.id }}">cancelando…</span>
+      {% else %}
       <span class="badge estado-{{ tarea.estado }}" data-tarea-estado="{{ tarea.id }}">{{ tarea.estado }}</span>
+      {% endif %}
     </div>
     <div><strong>Progreso:</strong>
       <div class="progressbar" role="progressbar" aria-label="Progreso de la copia">
@@ -39,7 +43,7 @@
   {% endif %}
   <form method="post" action="/tareas/{{ tarea.id }}/run" class="inline"><button class="primary">Ejecutar ya</button></form>
   <form method="post" action="/tareas/{{ tarea.id }}/cancelar" class="inline" data-tarea-cancel="{{ tarea.id }}"
-        {% if tarea.estado != 'en_progreso' %}hidden{% endif %}
+        {% if tarea.estado != 'en_progreso' or tarea.cancelando %}hidden{% endif %}
         onsubmit="return confirm('¿Cancelar la copia en curso?')">
     <button class="danger">Cancelar copia</button>
   </form>

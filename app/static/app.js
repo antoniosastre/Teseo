@@ -137,11 +137,16 @@
           if (bar) bar.style.width = t.porcentaje + "%";
           var pct = document.querySelector("[data-tarea-pct='" + id + "']");
           if (pct) pct.textContent = t.porcentaje + "%";
+          var cancelando = t.estado === "en_progreso" && t.cancelando;
           var est = document.querySelector("[data-tarea-estado='" + id + "']");
-          if (est) { est.textContent = t.estado; est.className = "badge estado-" + t.estado; }
+          if (est) {
+            est.textContent = cancelando ? "cancelando…" : t.estado;
+            est.className = "badge estado-" + (cancelando ? "cancelando" : t.estado);
+          }
           var cancel = document.querySelector("[data-tarea-cancel='" + id + "']");
           if (cancel) {
-            if (t.estado === "en_progreso") cancel.removeAttribute("hidden");
+            // Visible solo si está en progreso Y aún no se ha pedido cancelar.
+            if (t.estado === "en_progreso" && !t.cancelando) cancel.removeAttribute("hidden");
             else cancel.setAttribute("hidden", "");
           }
         });
