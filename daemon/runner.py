@@ -118,6 +118,23 @@ def _limpiar(origin: SshTarget, tarea_id: int) -> None:
         pass
 
 
+def _matar(origin: SshTarget, tarea_id: int) -> None:
+    """Mata la copia descolgada en el origen (best-effort).
+
+    Como el script se lanzó con ``setsid``, su PID es el líder del grupo de
+    procesos, así que ``kill -TERM -<pid>`` (nótese el guion) termina también al
+    ``rsync`` hijo. Se intenta primero el grupo y, como respaldo, el PID suelto.
+    """
+    r = _rutas(tarea_id)
+    cmd = (
+        f'p=$(cat {r["pid"]} 2>/dev/null); '
+        f'[ -n "$p" ] && {{ kill -TERM -"$p" 2>/dev/null; kill -TERM "$p" 2>/dev/null; }}; '
+        f'true'
+    )
+    with connect(origin, timeout=30) as client:
+        run(client, cmd, timeout=30)
+
+
 # --- Lanzamiento -------------------------------------------------------------
 
 def lanzar_tarea(tarea_id: int, box: SecretBox) -> None:
@@ -153,6 +170,7 @@ def lanzar_tarea(tarea_id: int, box: SecretBox) -> None:
         tarea.estado = "en_progreso"
         tarea.porcentaje = 0
         tarea.run_now = False
+        tarea.cancel_requested = False  # arrancamos en limpio
         ejec = Ejecucion(tarea_id=tarea_id, inicio=dt.datetime.now())
         session.add(ejec)
         session.flush()
@@ -189,7 +207,8 @@ def lanzar_tarea(tarea_id: int, box: SecretBox) -> None:
 def sondear_tarea(tarea_id: int, box: SecretBox) -> str:
     """Consulta el estado de una copia en curso y la finaliza si ha terminado.
 
-    Devuelve: "running" | "starting" | "done" | "interrupted" | "unreachable" | "n/a".
+    Devuelve: "running" | "starting" | "done" | "interrupted" | "unreachable"
+              | "cancelled" | "n/a".
     """
     with session_scope() as session:
         tarea = session.get(Tarea, tarea_id)
@@ -202,6 +221,7 @@ def sondear_tarea(tarea_id: int, box: SecretBox) -> str:
             "tipo": tarea.tipo, "retencion_dias": tarea.retencion_dias, "cron": tarea.cron,
             "host_nombre": host.nombre, "origen_nombre": origen.nombre,
         }
+        cancelar = tarea.cancel_requested
         origin_target = ssh_target_for_host(host, box)
         destino_target = ssh_target_for_destino(destino, box)
         ejec = session.scalars(
@@ -211,6 +231,18 @@ def sondear_tarea(tarea_id: int, box: SecretBox) -> str:
         ejec_id = ejec.id if ejec else None
         inicio = ejec.inicio if ejec else None
         snapshot_path = ejec.snapshot_path if ejec else None
+
+    # Cancelación pedida por el usuario: matar la copia en el origen y cerrarla.
+    # No se notifica por email (es una acción deliberada, no un fallo).
+    if cancelar:
+        try:
+            _matar(origin_target, tarea_id)
+        except SshError:
+            pass  # si el origen no responde, igualmente cerramos la ejecución
+        _finalize(tarea_id, ejec_id, "cancelada",
+                  "Copia cancelada por el usuario.", None, snapshot_path, info["cron"])
+        _limpiar(origin_target, tarea_id)
+        return "cancelled"
 
     try:
         rc, alive, log = _estado_copia(origin_target, tarea_id)
@@ -293,6 +325,7 @@ def _finalize(tarea_id, ejec_id, resultado, error_msg, sent_bytes, snapshot_path
         if t:
             t.estado = "terminada" if resultado == "ok" else "fallida"
             t.porcentaje = 100 if resultado == "ok" else t.porcentaje
+            t.cancel_requested = False  # consumir la bandera: no arrastrarla al próximo run
             t.last_run_at = now
             t.next_run_at = next_run
         e = session.get(Ejecucion, ejec_id) if ejec_id else None
@@ -303,4 +336,5 @@ def _finalize(tarea_id, ejec_id, resultado, error_msg, sent_bytes, snapshot_path
             if snapshot_path:
                 e.snapshot_path = snapshot_path
             e.error = error_msg
-            e.resumen = "Copia completada." if resultado == "ok" else None
+            e.resumen = {"ok": "Copia completada.",
+                         "cancelada": "Copia cancelada."}.get(resultado)

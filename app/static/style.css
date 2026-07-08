@@ -85,6 +85,8 @@ table.sub{margin:.4rem 0;background:var(--panel2)}
 .scorebar-fill.amarillo{background:#f2d13a}
 .scorebar-fill.verde{background:#30a46c}
 .scorebar-fill.azul{background:#3b82f6}
+.progressbar{display:inline-block;vertical-align:middle;width:220px;height:14px;background:var(--panel2);border-radius:999px;overflow:hidden}
+.progressbar-fill{height:100%;width:0;border-radius:999px;background:#3b82f6;transition:width .5s ease}
 
 .chips{list-style:none;display:flex;gap:.4rem;flex-wrap:wrap;padding:0;margin:.4rem 0}
 .chip{background:var(--panel);border:1px solid var(--border);border-radius:1rem;padding:.15rem .7rem;font-size:.82rem}

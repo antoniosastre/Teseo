@@ -117,7 +117,7 @@ class Daemon:
                 lanzar_tarea(tarea_id, self._box)
             else:
                 estado = sondear_tarea(tarea_id, self._box)
-                if estado in ("done", "interrupted"):
+                if estado in ("done", "interrupted", "cancelled"):
                     log.info("Tarea %s: %s", tarea_id, estado)
         except Exception:  # noqa: BLE001 - un worker nunca debe tumbar el daemon
             log.exception("Error en worker %s de la tarea %s", kind, tarea_id)
