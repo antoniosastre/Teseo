@@ -98,6 +98,29 @@ journalctl -u teseod -f            # log del daemon (scheduler, analizador, copi
 - `teseo-web`: panel (uvicorn en 127.0.0.1:8080).
 - `teseod`: scheduler + ejecución de copias + monitor + analizador.
 
+### Acceso al panel
+
+Por defecto el panel solo escucha en **loopback** (`127.0.0.1:8080`); accede de forma
+segura por **túnel SSH** desde tu equipo:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 usuario@tu-servidor    # luego abre http://127.0.0.1:8080
+```
+
+- **Exponer en la LAN (HTTP plano, solo red de confianza):** cambia la interfaz de
+  escucha con un *drop-in* (no edites la unidad instalada):
+
+  ```bash
+  sudo systemctl edit teseo-web      # añade:
+  #   [Service]
+  #   Environment=TESEO_WEB_HOST=0.0.0.0
+  sudo systemctl restart teseo-web
+  sudo ufw allow from <tu-red>/24 to any port 8080   # si usas ufw
+  ```
+
+  ⚠️ Sirve HTTP sin cifrar (login/cookie/secretos en claro). Para uso serio, TLS (§6).
+- **Producción:** nginx + TLS por delante (§6), dejando el panel en loopback.
+
 ---
 
 ## 6. Acceso en producción (nginx + TLS)
