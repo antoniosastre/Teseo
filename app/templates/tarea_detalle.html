@@ -13,7 +13,16 @@
     <div><strong>Tipo:</strong> {{ tarea.tipo }}</div>
     <div><strong>Programación:</strong> <code>{{ tarea.cron }}</code></div>
     <div><strong>Retención:</strong> {{ tarea.retencion_dias }} días</div>
-    <div><strong>Estado:</strong> <span class="badge estado-{{ tarea.estado }}">{{ tarea.estado }}</span></div>
+    <div><strong>Estado:</strong>
+      <span class="badge estado-{{ tarea.estado }}" data-tarea-estado="{{ tarea.id }}">{{ tarea.estado }}</span>
+    </div>
+    <div><strong>Progreso:</strong>
+      <div class="progressbar" role="progressbar" aria-label="Progreso de la copia">
+        <div class="progressbar-fill" data-tarea-bar="{{ tarea.id }}"
+             style="width: {{ tarea.porcentaje }}%"></div>
+      </div>
+      <span class="muted" data-tarea-pct="{{ tarea.id }}">{{ tarea.porcentaje }}%</span>
+    </div>
     <div><strong>Puntuación protección:</strong>
       <div class="scorebar scorebar-lg" role="img" title="Protección: {{ tarea.score_texto }}"
            aria-label="Protección: {{ tarea.score_texto }}">
@@ -29,6 +38,11 @@
   <pre class="cmd">{{ tarea.comando_rsync }}</pre>
   {% endif %}
   <form method="post" action="/tareas/{{ tarea.id }}/run" class="inline"><button class="primary">Ejecutar ya</button></form>
+  <form method="post" action="/tareas/{{ tarea.id }}/cancelar" class="inline" data-tarea-cancel="{{ tarea.id }}"
+        {% if tarea.estado != 'en_progreso' %}hidden{% endif %}
+        onsubmit="return confirm('¿Cancelar la copia en curso?')">
+    <button class="danger">Cancelar copia</button>
+  </form>
 </div>
 
 <h2>Historial de ejecuciones</h2>

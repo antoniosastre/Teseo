@@ -110,6 +110,26 @@ def test_run_now_y_estado(auth_client):
     assert str(tid) in j["tareas"]
 
 
+def test_cancelar_marca_bandera_solo_en_progreso(auth_client):
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    with session_scope() as s:
+        tid = s.query(Tarea).first().id
+    # Tarea "esperando": cancelar no debe marcar nada.
+    auth_client.post(f"/tareas/{tid}/cancelar", follow_redirects=False)
+    with session_scope() as s:
+        assert s.query(Tarea).first().cancel_requested is False
+    # Tarea "en_progreso": cancelar sí marca la bandera.
+    with session_scope() as s:
+        s.query(Tarea).first().estado = "en_progreso"
+    r = auth_client.post(f"/tareas/{tid}/cancelar", follow_redirects=False)
+    assert r.status_code == 303
+    with session_scope() as s:
+        assert s.query(Tarea).first().cancel_requested is True
+
+
 def test_pantallas_wizard_y_detalle_renderizan(auth_client):
     oid, did = _crear_entorno()
     with session_scope() as s:

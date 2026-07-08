@@ -19,7 +19,11 @@ import unicodedata
 from dataclasses import dataclass
 
 # Flags base por defecto. -a (archivo), -z (compresión), progreso legible.
-BASE_FLAGS = ["-a", "-z", "--info=progress2", "--stats"]
+# --no-inc-recursive fuerza a rsync a construir la lista COMPLETA de ficheros
+# antes de transferir: así el porcentaje de --info=progress2 es global y real
+# desde el principio (con recursión incremental el % es engañoso: rsync descubre
+# ficheros sobre la marcha, se queda pegado al 0% y pega saltos al final).
+BASE_FLAGS = ["-a", "-z", "--info=progress2", "--stats", "--no-inc-recursive"]
 
 
 # override. Un override es un "modo experto": debe ser UNA invocación de rsync,

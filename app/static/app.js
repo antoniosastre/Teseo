@@ -139,6 +139,11 @@
           if (pct) pct.textContent = t.porcentaje + "%";
           var est = document.querySelector("[data-tarea-estado='" + id + "']");
           if (est) { est.textContent = t.estado; est.className = "badge estado-" + t.estado; }
+          var cancel = document.querySelector("[data-tarea-cancel='" + id + "']");
+          if (cancel) {
+            if (t.estado === "en_progreso") cancel.removeAttribute("hidden");
+            else cancel.setAttribute("hidden", "");
+          }
         });
         Object.keys(data.hosts || {}).forEach(function (id) {
           var h = data.hosts[id];

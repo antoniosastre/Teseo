@@ -24,6 +24,16 @@ async def run_now(tarea_id: int, _: int = Depends(require_login)):
     return RedirectResponse("/origenes", status_code=303)
 
 
+@router.post("/{tarea_id}/cancelar")
+async def cancelar(tarea_id: int, _: int = Depends(require_login)):
+    """Marca la copia en curso para cancelar. El daemon la aborta en el próximo sondeo."""
+    with session_scope() as session:
+        t = session.get(Tarea, tarea_id)
+        if t and t.estado == "en_progreso":
+            t.cancel_requested = True
+    return RedirectResponse(f"/tareas/{tarea_id}", status_code=303)
+
+
 @router.post("/{tarea_id}/toggle")
 async def toggle(tarea_id: int, _: int = Depends(require_login)):
     with session_scope() as session:

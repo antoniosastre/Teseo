@@ -208,6 +208,7 @@ class Tarea(Base):
     estado: Mapped[str] = mapped_column(Enum(*ESTADOS_TAREA), default="esperando")
     porcentaje: Mapped[int] = mapped_column(Integer, default=0)
     run_now: Mapped[bool] = mapped_column(Boolean, default=False)         # bandera "ejecutar ya"
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)  # bandera "cancelar copia"
     activa: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)
     next_run_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime)

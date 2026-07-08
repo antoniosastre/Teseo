@@ -48,6 +48,13 @@ def test_incremental_usa_link_dest():
     assert p.snapshot_name and p.snapshot_name in p.dest_target
 
 
+def test_calcula_tamano_total_antes_de_transferir():
+    # --no-inc-recursive => rsync escanea todo primero y el % de progress2 es real.
+    p = _plan()
+    assert "--no-inc-recursive" in p.command
+    assert "--info=progress2" in p.command
+
+
 def test_transporte_ssh_con_puerto_y_clave():
     p = _plan(destino_puerto=2222, key_path="/home/u/.ssh/k")
     assert "-p 2222" in p.command and "-i /home/u/.ssh/k" in p.command

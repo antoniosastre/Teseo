@@ -88,3 +88,27 @@ def run_install(
                     email=admin_email or None,
                 )
             )
+
+    # 5) Sellar la BD en la última revisión de Alembic. create_all ya dejó el
+    #    esquema al día, así que "stamp head" marca la BD como migrada sin volver
+    #    a aplicar cambios; los futuros `alembic upgrade head` solo correrán las
+    #    migraciones nuevas y no chocarán con lo que create_all ya creó.
+    stamp_head()
+
+
+def stamp_head() -> None:
+    """Marca la BD como sellada en la última revisión de Alembic (best-effort).
+
+    Se hace tras ``create_all`` en una instalación nueva. Si Alembic no está
+    disponible o falla, no abortamos la instalación: ``update.sh`` aplicará las
+    migraciones más adelante (el baseline vacío hace idempotente ese camino)."""
+    try:
+        from pathlib import Path
+
+        from alembic import command
+        from alembic.config import Config
+
+        ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+        command.stamp(Config(str(ini)), "head")
+    except Exception:  # noqa: BLE001 - sellar es una optimización, no un requisito
+        pass
