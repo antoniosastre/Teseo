@@ -90,5 +90,12 @@ def test_fuente_rsync_config_filtra_arroba():
     ruta, filtros = SynologyConnector().fuente_rsync("config", "/volume1")
     assert ruta == "/volume1"
     assert "--include=@*" in filtros and "--exclude=*" in filtros
-    # Carpeta normal: sin filtros.
-    assert SynologyConnector().fuente_rsync("carpeta", "/volume1/web") == ("/volume1/web", [])
+    # @eaDir se excluye SIEMPRE, y antes de los include para que gane.
+    assert filtros[0] == "--exclude=@eaDir"
+
+
+def test_fuente_rsync_carpeta_excluye_eadir():
+    # Carpeta normal: sin include/exclude salvo la exclusión de @eaDir.
+    assert SynologyConnector().fuente_rsync("carpeta", "/volume1/web") == (
+        "/volume1/web", ["--exclude=@eaDir"]
+    )
