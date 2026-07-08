@@ -18,11 +18,14 @@ def test_sanitize_component():
     assert sanitize_component("/var/www/") == "var_www"
     assert sanitize_component("a b#c") == "a_b_c"
     assert sanitize_component("/") == "root"
+    # Acentos/eñes se transliteran a ASCII, no se sustituyen por "_".
+    assert sanitize_component("Configuración") == "Configuracion"
+    assert sanitize_component("año señal über") == "ano_senal_uber"
 
 
 def test_dest_layout():
     d = dest_task_dir("/backups/", "web 1", "volume1", "Configuración", "incremental")
-    assert d == "/backups/web_1/volume1/Configuraci_n/incremental"
+    assert d == "/backups/web_1/volume1/Configuracion/incremental"
 
 
 def _plan(**kw):
