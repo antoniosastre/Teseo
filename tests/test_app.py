@@ -108,6 +108,19 @@ def test_run_now_y_estado(auth_client):
         assert s.query(Tarea).first().run_now is True
     j = auth_client.get("/estado/json").json()
     assert str(tid) in j["tareas"]
+    assert "velocidad" in j["tareas"][str(tid)]      # expuesta para la UI en vivo
+
+
+def test_dashboard_muestra_velocidad_en_progreso(auth_client):
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    with session_scope() as s:
+        t = s.query(Tarea).first()
+        t.estado, t.porcentaje, t.velocidad = "en_progreso", 42, "4.72MB/s"
+    html = auth_client.get("/").text
+    assert "data-tarea-vel" in html and "4.72MB/s" in html
 
 
 def test_cancelar_marca_bandera_solo_en_progreso(auth_client):
@@ -193,6 +206,7 @@ def test_finalize_parcial_marca_terminada(auth_client):
         t = s.query(Tarea).first()
         tid = t.id
         t.estado = "en_progreso"
+        t.velocidad = "4.72MB/s"
         e = Ejecucion(tarea_id=tid, inicio=dt.datetime.now())
         s.add(e)
         s.flush()
@@ -201,6 +215,7 @@ def test_finalize_parcial_marca_terminada(auth_client):
     with session_scope() as s:
         t = s.query(Tarea).first()
         assert t.estado == "terminada" and t.porcentaje == 100
+        assert t.velocidad is None                   # la copia ya no corre
         e = s.query(Ejecucion).first()
         assert e.resultado == "parcial"
         assert "avisos" in e.resumen

@@ -35,6 +35,7 @@ async def dashboard(request: Request, _: int = Depends(require_login)):
                 "tipo": t.tipo,
                 "estado": t.estado,
                 "porcentaje": t.porcentaje,
+                "velocidad": t.velocidad,
                 "activa": t.activa,
                 "last_run_at": t.last_run_at,
                 "next_run_at": t.next_run_at,

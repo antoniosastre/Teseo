@@ -137,6 +137,8 @@
           if (bar) bar.style.width = t.porcentaje + "%";
           var pct = document.querySelector("[data-tarea-pct='" + id + "']");
           if (pct) pct.textContent = t.porcentaje + "%";
+          var vel = document.querySelector("[data-tarea-vel='" + id + "']");
+          if (vel) vel.textContent = t.velocidad ? "· " + t.velocidad : "";
           var cancelando = t.estado === "en_progreso" && t.cancelando;
           var est = document.querySelector("[data-tarea-estado='" + id + "']");
           if (est) {

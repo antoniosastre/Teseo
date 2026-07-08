@@ -31,6 +31,7 @@ from daemon.notify import notify_failure
 from daemon.retention import apply_retention, set_current_symlink
 
 _PCT_RE = re.compile(r"(\d{1,3})%")
+_VEL_RE = re.compile(r"([\d.,]+[kKMGT]?B/s)")   # "4.72MB/s", "612.34kB/s"…
 _SENT_RE = re.compile(r"sent ([\d,]+) bytes")
 _TESEO_DIR = "~/.teseo"
 _GRACIA_ARRANQUE_S = 45  # margen tras lanzar antes de considerar un pid ausente como "interrumpida"
@@ -169,6 +170,7 @@ def lanzar_tarea(tarea_id: int, box: SecretBox) -> None:
         # Marcar en progreso + abrir registro de ejecución.
         tarea.estado = "en_progreso"
         tarea.porcentaje = 0
+        tarea.velocidad = None
         tarea.run_now = False
         tarea.cancel_requested = False  # arrancamos en limpio
         ejec = Ejecucion(tarea_id=tarea_id, inicio=dt.datetime.now())
@@ -253,8 +255,12 @@ def sondear_tarea(tarea_id: int, box: SecretBox) -> str:
     if rc is None:
         if alive:
             pcts = _PCT_RE.findall(log)
-            if pcts:
-                _update_pct(tarea_id, min(100, int(pcts[-1])))
+            vels = _VEL_RE.findall(log)
+            _update_progreso(
+                tarea_id,
+                pct=min(100, int(pcts[-1])) if pcts else None,
+                velocidad=vels[-1] if vels else None,
+            )
             return "running"
         # pid ausente y sin .rc: si acaba de lanzarse, dale margen; si no, interrumpida.
         if inicio and (dt.datetime.now() - inicio).total_seconds() < _GRACIA_ARRANQUE_S:
@@ -302,11 +308,13 @@ def sondear_tarea(tarea_id: int, box: SecretBox) -> str:
 
 # --- Auxiliares --------------------------------------------------------------
 
-def _update_pct(tarea_id: int, pct: int) -> None:
+def _update_progreso(tarea_id: int, pct: int | None, velocidad: str | None) -> None:
     with session_scope() as session:
         t = session.get(Tarea, tarea_id)
         if t:
-            t.porcentaje = pct
+            if pct is not None:
+                t.porcentaje = pct
+            t.velocidad = velocidad
 
 
 def _prepare_destino(destino: SshTarget, dest_root: str) -> None:
@@ -329,6 +337,7 @@ def _finalize(tarea_id, ejec_id, resultado, error_msg, sent_bytes, snapshot_path
     with session_scope() as session:
         t = session.get(Tarea, tarea_id)
         if t:
+            t.velocidad = None  # la copia ya no corre
             if resultado in ("ok", "parcial"):
                 t.estado, t.porcentaje = "terminada", 100
             elif resultado == "cancelada":
