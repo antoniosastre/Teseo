@@ -72,6 +72,8 @@ table.sub{margin:.4rem 0;background:var(--panel2)}
 .badge.cancelada{background:#3f3f46;color:#d4d4d8}
 .estado-en_progreso{background:#1e3a8a;color:#bfdbfe}
 .estado-esperando{background:var(--panel2);color:var(--muted)}
+.estado-cancelando{background:#78350f;color:#fde68a;animation:pulso 1.2s ease-in-out infinite}
+@keyframes pulso{50%{opacity:.55}}
 
 .progress{height:8px;background:var(--panel);border-radius:4px;overflow:hidden;width:90px;display:inline-block;vertical-align:middle;margin-right:.4rem}
 .progress-fill{height:100%;background:var(--primary);transition:width .4s}

@@ -329,8 +329,14 @@ def _finalize(tarea_id, ejec_id, resultado, error_msg, sent_bytes, snapshot_path
     with session_scope() as session:
         t = session.get(Tarea, tarea_id)
         if t:
-            t.estado = "terminada" if resultado in ("ok", "parcial") else "fallida"
-            t.porcentaje = 100 if resultado in ("ok", "parcial") else t.porcentaje
+            if resultado in ("ok", "parcial"):
+                t.estado, t.porcentaje = "terminada", 100
+            elif resultado == "cancelada":
+                # Cancelar es deliberado, no un fallo: la tarea vuelve a la cola
+                # (next_run_at ya recalculado) con el progreso a cero.
+                t.estado, t.porcentaje = "esperando", 0
+            else:
+                t.estado = "fallida"
             t.cancel_requested = False  # consumir la bandera: no arrastrarla al próximo run
             t.last_run_at = now
             t.next_run_at = next_run

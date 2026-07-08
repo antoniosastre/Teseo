@@ -83,6 +83,7 @@ async def detalle(tarea_id: int, request: Request, _: int = Depends(require_logi
             "tipo": t.tipo,
             "cron": t.cron,
             "estado": t.estado,
+            "cancelando": t.estado == "en_progreso" and t.cancel_requested,
             "porcentaje": t.porcentaje,
             "retencion_dias": t.retencion_dias,
             "comando_rsync": t.comando_rsync,
