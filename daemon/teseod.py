@@ -1,11 +1,13 @@
-"""Daemon de Teseo: scheduler interno + ejecutor de copias.
+"""Daemon de Teseo: scheduler interno + orquestador de copias.
 
 Coordina con la web exclusivamente a través de la base de datos:
-  - toma tareas marcadas ``run_now`` o cuya ``next_run_at`` ha vencido,
-  - las ejecuta con control de concurrencia,
-  - monitoriza periódicamente destinos y orígenes.
+  - LANZA las tareas vencidas (``run_now`` o ``next_run_at`` cumplido) como copias
+    DESCOLGADAS en el origen (ver daemon/runner.lanzar_tarea) — no espera a que acaben,
+  - SONDEA en cada tick las copias en curso hasta que terminan (runner.sondear_tarea);
+    esto re-adopta también las copias que sobrevivieron a un reinicio del controlador,
+  - monitoriza periódicamente destinos/orígenes y dispara el analizador.
 
-Pensado para correr como servicio systemd (ver deploy/teseod.service).
+MAX_CONCURRENCY limita las copias VIVAS simultáneas. Pensado para systemd (deploy/).
 """
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ import threading
 import time
 
 from croniter import croniter
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.config import config_exists, load_config
 from app.crypto import SecretBox
@@ -25,7 +27,7 @@ from app.models import Tarea
 from app.settings import analizador_run_now, intervalo_analizador_horas, marcar_analizador_run_now
 from daemon.analyzer import run_analisis
 from daemon.monitor import check_destinos, check_origenes
-from daemon.runner import run_tarea
+from daemon.runner import lanzar_tarea, sondear_tarea
 
 logging.basicConfig(
     level=logging.INFO,
@@ -92,7 +94,6 @@ class Daemon:
 
     def _tick(self):
         now = dt.datetime.now()
-        self._reap()
 
         # Monitorización periódica (en hilo aparte para no frenar el scheduler).
         if time.time() - self._last_monitor > MONITOR_INTERVAL:
@@ -102,48 +103,65 @@ class Daemon:
         # Analizador: por intervalo configurable (ajustes) o disparo manual.
         self._maybe_analisis()
 
-        # Selección de tareas a ejecutar.
+        # 1) Sondear las copias en curso (re-adopta también las que sobrevivieron a un
+        #    reinicio del controlador; el runner las finaliza cuando terminan).
+        self._sondear_en_progreso()
+
+        # 2) Lanzar las tareas vencidas, respetando la concurrencia máxima de copias vivas.
+        self._lanzar_pendientes(now)
+
+    def _worker(self, kind: str, tarea_id: int):
+        try:
+            if kind == "launch":
+                log.info("Lanzando copia de la tarea %s", tarea_id)
+                lanzar_tarea(tarea_id, self._box)
+            else:
+                estado = sondear_tarea(tarea_id, self._box)
+                if estado in ("done", "interrupted"):
+                    log.info("Tarea %s: %s", tarea_id, estado)
+        except Exception:  # noqa: BLE001 - un worker nunca debe tumbar el daemon
+            log.exception("Error en worker %s de la tarea %s", kind, tarea_id)
+        finally:
+            with self._lock:
+                self._running.pop(tarea_id, None)
+
+    def _arrancar_worker(self, kind: str, tarea_id: int) -> bool:
+        """Arranca un worker si la tarea no tiene ya uno en curso. Devuelve si arrancó."""
+        with self._lock:
+            if tarea_id in self._running:
+                return False
+            th = threading.Thread(target=self._worker, args=(kind, tarea_id), daemon=True)
+            self._running[tarea_id] = th
+            th.start()
+            return True
+
+    def _sondear_en_progreso(self):
         with session_scope() as session:
-            tareas = list(
-                session.scalars(
-                    select(Tarea).where(Tarea.activa.is_(True), Tarea.estado != "en_progreso")
-                )
-            )
+            ids = [t.id for t in session.scalars(
+                select(Tarea).where(Tarea.estado == "en_progreso"))]
+        for tarea_id in ids:
+            self._arrancar_worker("poll", tarea_id)
+
+    def _lanzar_pendientes(self, now):
+        with session_scope() as session:
+            en_progreso = session.scalar(
+                select(func.count()).select_from(Tarea).where(Tarea.estado == "en_progreso")
+            ) or 0
             due = []
-            for t in tareas:
-                if t.id in self._running:
-                    continue
+            for t in session.scalars(
+                select(Tarea).where(Tarea.activa.is_(True), Tarea.estado != "en_progreso")
+            ):
                 if t.run_now or (t.next_run_at is not None and t.next_run_at <= now):
                     due.append(t.id)
                 elif t.next_run_at is None and croniter.is_valid(t.cron):
                     t.next_run_at = croniter(t.cron, now).get_next(dt.datetime)
 
+        capacidad = MAX_CONCURRENCY - en_progreso
         for tarea_id in due:
-            with self._lock:
-                if len(self._running) >= MAX_CONCURRENCY:
-                    break
-                if tarea_id in self._running:
-                    continue
-                th = threading.Thread(target=self._execute, args=(tarea_id,), daemon=True)
-                self._running[tarea_id] = th
-                th.start()
-
-    def _execute(self, tarea_id: int):
-        log.info("Ejecutando tarea %s", tarea_id)
-        try:
-            run_tarea(tarea_id, self._box)
-        except Exception:  # noqa: BLE001
-            log.exception("Fallo ejecutando tarea %s", tarea_id)
-        finally:
-            with self._lock:
-                self._running.pop(tarea_id, None)
-            log.info("Tarea %s finalizada", tarea_id)
-
-    def _reap(self):
-        with self._lock:
-            muertas = [tid for tid, th in self._running.items() if not th.is_alive()]
-            for tid in muertas:
-                self._running.pop(tid, None)
+            if capacidad <= 0:
+                break
+            if self._arrancar_worker("launch", tarea_id):
+                capacidad -= 1
 
     def _run_monitor(self):
         try:
