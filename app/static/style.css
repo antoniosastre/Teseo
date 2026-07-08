@@ -68,6 +68,8 @@ table.sub{margin:.4rem 0;background:var(--panel2)}
 .badge{padding:.15rem .5rem;border-radius:.4rem;font-size:.78rem;background:var(--panel2);text-transform:capitalize}
 .badge.ok,.estado-terminada{background:#14532d;color:#bbf7d0}
 .badge.fallo,.estado-fallida{background:#7f1d1d;color:#fecaca}
+.badge.parcial{background:#78350f;color:#fde68a}
+.badge.cancelada{background:#3f3f46;color:#d4d4d8}
 .estado-en_progreso{background:#1e3a8a;color:#bfdbfe}
 .estado-esperando{background:var(--panel2);color:var(--muted)}
 

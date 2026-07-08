@@ -10,6 +10,32 @@
   <div class="card danger"><span class="num">{{ fallidas }}</span><span class="lbl">Fallidas</span></div>
 </div>
 
+<h2>Tareas de copia</h2>
+{% if tareas %}
+<table class="data">
+  <thead><tr><th>Origen</th><th>Destino</th><th>Tipo</th><th>Estado</th><th>Progreso</th><th>Última</th><th>Siguiente</th></tr></thead>
+  <tbody>
+  {% for t in tareas %}
+    <tr{% if not t.activa %} class="muted"{% endif %}>
+      <td><a href="/tareas/{{ t.id }}">{{ t.host }} · {{ t.origen }}</a></td>
+      <td>{{ t.destino }}</td>
+      <td>{{ t.tipo }}{% if not t.activa %} <small>(desactivada)</small>{% endif %}</td>
+      <td><span class="badge estado-{{ t.estado }}" data-tarea-estado="{{ t.id }}">{{ t.estado }}</span></td>
+      <td>
+        <div class="progress"><div class="progress-fill" data-tarea-bar="{{ t.id }}"
+             style="width: {{ t.porcentaje }}%"></div></div>
+        <small class="muted" data-tarea-pct="{{ t.id }}">{{ t.porcentaje }}%</small>
+      </td>
+      <td>{{ t.last_run_at|datetime_fmt }}</td>
+      <td>{{ t.next_run_at|datetime_fmt }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Todavía no hay tareas configuradas. Empieza en <a href="/origenes">Orígenes</a>.</p>
+{% endif %}
+
 <h2>Últimas ejecuciones</h2>
 <table class="data">
   <thead><tr><th>Host</th><th>Carpeta</th><th>Inicio</th><th>Fin</th><th>Resultado</th></tr></thead>
