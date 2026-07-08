@@ -28,6 +28,18 @@ def test_parse_estado_en_curso():
     assert rc is None and alive is True and "42%" in log
 
 
+def test_parse_velocidad_del_log():
+    from daemon.runner import _VEL_RE
+
+    # Líneas reales de --info=progress2 (separadas por \r en el log).
+    log = ("  1,262,293,084  99%    4.72MB/s    0:04:14 (xfr#23682, to-chk=44/25608)\r"
+           "  1,262,301,276  99%    5.03MB/s    0:04:15 (xfr#23683, to-chk=40/25608)")
+    vels = _VEL_RE.findall(log)
+    assert vels[-1] == "5.03MB/s"           # la última es la vigente
+    assert _VEL_RE.findall("  9,876  3%  612.34kB/s  0:00:02")[-1] == "612.34kB/s"
+    assert _VEL_RE.findall("sin progreso todavia") == []
+
+
 def test_parse_estado_terminada_ok():
     out = "RC=0\nALIVE=no\n===LOG===\nsent 1,234 bytes  received 56 bytes\n"
     rc, alive, log = _parse_estado(out)

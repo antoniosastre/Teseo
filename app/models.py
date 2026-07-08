@@ -209,6 +209,7 @@ class Tarea(Base):
     retencion_dias: Mapped[int] = mapped_column(Integer, default=7)       # conservar snapshots N días
     estado: Mapped[str] = mapped_column(Enum(*ESTADOS_TAREA), default="esperando")
     porcentaje: Mapped[int] = mapped_column(Integer, default=0)
+    velocidad: Mapped[Optional[str]] = mapped_column(String(32))          # "4.72MB/s" mientras corre
     run_now: Mapped[bool] = mapped_column(Boolean, default=False)         # bandera "ejecutar ya"
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)  # bandera "cancelar copia"
     activa: Mapped[bool] = mapped_column(Boolean, default=True)

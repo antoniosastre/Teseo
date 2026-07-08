@@ -26,6 +26,7 @@
              style="width: {{ tarea.porcentaje }}%"></div>
       </div>
       <span class="muted" data-tarea-pct="{{ tarea.id }}">{{ tarea.porcentaje }}%</span>
+      <span class="muted" data-tarea-vel="{{ tarea.id }}">{% if tarea.velocidad %}· {{ tarea.velocidad }}{% endif %}</span>
     </div>
     <div><strong>Puntuación protección:</strong>
       <div class="scorebar scorebar-lg" role="img" title="Protección: {{ tarea.score_texto }}"

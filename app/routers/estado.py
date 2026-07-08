@@ -18,7 +18,7 @@ def _snapshot() -> dict:
     with session_scope() as session:
         tareas = {
             t.id: {"estado": t.estado, "porcentaje": t.porcentaje,
-                   "cancelando": t.cancel_requested}
+                   "velocidad": t.velocidad, "cancelando": t.cancel_requested}
             for t in session.scalars(select(Tarea))
         }
         hosts = {

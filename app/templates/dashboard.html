@@ -25,6 +25,7 @@
         <div class="progress"><div class="progress-fill" data-tarea-bar="{{ t.id }}"
              style="width: {{ t.porcentaje }}%"></div></div>
         <small class="muted" data-tarea-pct="{{ t.id }}">{{ t.porcentaje }}%</small>
+        <small class="muted" data-tarea-vel="{{ t.id }}">{% if t.velocidad %}· {{ t.velocidad }}{% endif %}</small>
       </td>
       <td>{{ t.last_run_at|datetime_fmt }}</td>
       <td>{{ t.next_run_at|datetime_fmt }}</td>
