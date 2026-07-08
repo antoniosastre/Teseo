@@ -130,6 +130,47 @@ def test_cancelar_marca_bandera_solo_en_progreso(auth_client):
         assert s.query(Tarea).first().cancel_requested is True
 
 
+def test_dashboard_lista_todas_las_tareas(auth_client):
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    html = auth_client.get("/").text
+    assert "Tareas de copia" in html
+    assert "web1 · web" in html and "nas1" in html      # origen y destino
+    assert "data-tarea-estado" in html                   # badges vivos por SSE
+    assert "data-tarea-bar" in html                      # barra de progreso viva
+
+
+def test_finalize_parcial_marca_terminada(auth_client):
+    """rsync 23 (transferencia parcial) => tarea terminada, ejecución 'parcial', sin fallo."""
+    import datetime as dt
+
+    from app.models import Ejecucion
+    from daemon.runner import _finalize
+
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    with session_scope() as s:
+        t = s.query(Tarea).first()
+        tid = t.id
+        t.estado = "en_progreso"
+        e = Ejecucion(tarea_id=tid, inicio=dt.datetime.now())
+        s.add(e)
+        s.flush()
+        eid = e.id
+    _finalize(tid, eid, "parcial", "cola del log con avisos", 1234, None, "0 2 * * *")
+    with session_scope() as s:
+        t = s.query(Tarea).first()
+        assert t.estado == "terminada" and t.porcentaje == 100
+        e = s.query(Ejecucion).first()
+        assert e.resultado == "parcial"
+        assert "avisos" in e.resumen
+        assert e.bytes_transferidos == 1234
+
+
 def test_pantallas_wizard_y_detalle_renderizan(auth_client):
     oid, did = _crear_entorno()
     with session_scope() as s:

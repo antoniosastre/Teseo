@@ -274,8 +274,14 @@ def sondear_tarea(tarea_id: int, box: SecretBox) -> str:
 
     resultado = "ok"
     error_msg = None
-    # rsync rc 24 = "ficheros desaparecieron durante la copia": no es fatal.
-    if rc in (0, 24):
+    # rc 24 = "ficheros desaparecieron durante la copia": benigno.
+    # rc 23 = transferencia PARCIAL: los datos se copiaron pero algunos ficheros o
+    #         atributos no (p. ej. owner/group hacia un Mac sin root). La copia
+    #         vale: se registra como "parcial" con el detalle, sin email de fallo.
+    if rc in (0, 23, 24):
+        if rc == 23:
+            resultado = "parcial"
+            error_msg = log[-2000:]  # cola del log: qué no se pudo transferir
         if info["tipo"] == "incremental" and snapshot_path:
             base = snapshot_path.rstrip("/")
             dest_root, _, snapshot_name = base.rpartition("/")
@@ -323,8 +329,8 @@ def _finalize(tarea_id, ejec_id, resultado, error_msg, sent_bytes, snapshot_path
     with session_scope() as session:
         t = session.get(Tarea, tarea_id)
         if t:
-            t.estado = "terminada" if resultado == "ok" else "fallida"
-            t.porcentaje = 100 if resultado == "ok" else t.porcentaje
+            t.estado = "terminada" if resultado in ("ok", "parcial") else "fallida"
+            t.porcentaje = 100 if resultado in ("ok", "parcial") else t.porcentaje
             t.cancel_requested = False  # consumir la bandera: no arrastrarla al próximo run
             t.last_run_at = now
             t.next_run_at = next_run
@@ -336,5 +342,9 @@ def _finalize(tarea_id, ejec_id, resultado, error_msg, sent_bytes, snapshot_path
             if snapshot_path:
                 e.snapshot_path = snapshot_path
             e.error = error_msg
-            e.resumen = {"ok": "Copia completada.",
-                         "cancelada": "Copia cancelada."}.get(resultado)
+            e.resumen = {
+                "ok": "Copia completada.",
+                "cancelada": "Copia cancelada.",
+                "parcial": "Copia completada con avisos: algunos ficheros o atributos "
+                           "no se transfirieron (rsync 23).",
+            }.get(resultado)

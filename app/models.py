@@ -40,7 +40,9 @@ ESTADOS_ORIGEN = ("activo", "desaparecido")   # "desaparecido" => tareas huérfa
 TIPOS_TAREA = ("espejo", "incremental")
 ESTADOS_TAREA = ("esperando", "en_progreso", "terminada", "fallida")
 ESTADOS_CONEXION = ("desconocido", "conectado", "inaccesible", "en_uso")
-RESULTADOS_EJEC = ("ok", "fallo", "cancelada")
+# "parcial" = rsync código 23: los datos se copiaron pero algunos ficheros o
+# atributos no (típico hacia Mac sin root: owner/group). No es un fallo.
+RESULTADOS_EJEC = ("ok", "fallo", "cancelada", "parcial")
 
 
 class Admin(Base):

@@ -55,6 +55,19 @@ def test_calcula_tamano_total_antes_de_transferir():
     assert "--info=progress2" in p.command
 
 
+def test_destino_sin_root_omite_owner_group():
+    # Sin root en el destino, chown/mknod son imposibles: pedirlos garantiza el
+    # rc 23 en cada copia (típico Mac). Se omiten y rc vuelve a ser señal real.
+    p = _plan(destino_usuario="bk")
+    for f in ("--no-owner", "--no-group", "--no-devices", "--no-specials"):
+        assert f in p.command
+
+
+def test_destino_root_preserva_owner_group():
+    p = _plan(destino_usuario="root")
+    assert "--no-owner" not in p.command and "--no-group" not in p.command
+
+
 def test_transporte_ssh_con_puerto_y_clave():
     p = _plan(destino_puerto=2222, key_path="/home/u/.ssh/k")
     assert "-p 2222" in p.command and "-i /home/u/.ssh/k" in p.command

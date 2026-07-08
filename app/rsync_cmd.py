@@ -124,6 +124,12 @@ def build_plan(
     include/exclude que aporta el conector (p. ej. el bundle @ de Synology).
     """
     flags = list(BASE_FLAGS)
+    # Solo root puede hacer chown o crear dispositivos en el destino. Si la
+    # conexión no es como root, pedirlo (-a incluye -o -g -D) garantiza el
+    # código 23 en CADA copia aunque los datos lleguen íntegros (típico Mac).
+    # Se omite lo imposible y así rc!=0 vuelve a ser una señal real.
+    if destino_usuario != "root":
+        flags += ["--no-owner", "--no-group", "--no-devices", "--no-specials"]
     dest_root = dest_task_dir(carpeta_base, host_nombre, volumen_nombre, origen_nombre, tipo)
 
     if tipo == "incremental":

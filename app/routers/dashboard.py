@@ -25,6 +25,22 @@ async def dashboard(request: Request, _: int = Depends(require_login)):
         fallidas = session.scalar(
             select(func.count()).select_from(Tarea).where(Tarea.estado == "fallida")
         )
+        # Todas las tareas configuradas, con su estado (la web lo refresca por SSE).
+        data_tareas = [
+            {
+                "id": t.id,
+                "host": t.origen.volumen.host_origen.nombre,
+                "origen": t.origen.nombre,
+                "destino": t.destino.nombre,
+                "tipo": t.tipo,
+                "estado": t.estado,
+                "porcentaje": t.porcentaje,
+                "activa": t.activa,
+                "last_run_at": t.last_run_at,
+                "next_run_at": t.next_run_at,
+            }
+            for t in session.scalars(select(Tarea).order_by(Tarea.id))
+        ]
         ultimas = list(
             session.scalars(select(Ejecucion).order_by(Ejecucion.inicio.desc()).limit(10))
         )
@@ -50,6 +66,7 @@ async def dashboard(request: Request, _: int = Depends(require_login)):
             "n_tareas": n_tareas,
             "en_progreso": en_progreso,
             "fallidas": fallidas,
+            "tareas": data_tareas,
             "ultimas": data_ultimas,
         },
     )
