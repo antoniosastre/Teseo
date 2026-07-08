@@ -90,10 +90,14 @@ class SynologyConnector:
         return volumenes
 
     def fuente_rsync(self, tipo_origen: str, ruta: str) -> tuple[str, list[str]]:
+        # @eaDir son los índices/miniaturas internos de Synology: nunca se copian.
+        # Va PRIMERO para que gane a cualquier --include posterior (rsync aplica
+        # los filtros por orden, primer match).
+        excluir_eadir = "--exclude=@eaDir"
         if tipo_origen == "config":
-            # Copiar solo lo que empieza por "@" en la raíz del volumen.
-            return ruta, ["--include=@*", "--include=@*/**", "--exclude=*"]
-        return ruta, []
+            # Copiar solo lo que empieza por "@" en la raíz del volumen (menos @eaDir).
+            return ruta, [excluir_eadir, "--include=@*", "--include=@*/**", "--exclude=*"]
+        return ruta, [excluir_eadir]
 
     def medir_tamano(self, ejecutar, tipo_origen: str, ruta: str) -> int | None:
         q = shlex.quote(ruta)
