@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 import shlex
+import unicodedata
 from dataclasses import dataclass
 
 # Flags base por defecto. -a (archivo), -z (compresión), progreso legible.
@@ -45,9 +46,17 @@ def validate_override(comando: str) -> str | None:
 
 
 def sanitize_component(value: str) -> str:
-    """Convierte una ruta/origen en un nombre de subcarpeta seguro y plano."""
+    """Convierte una ruta/origen en un nombre de subcarpeta seguro y plano.
+
+    Los acentos/diacríticos se TRANSLITERAN a ASCII ("Configuración" ->
+    "Configuracion") en vez de sustituirse por "_": los filesystems de destino
+    normalizan Unicode de formas distintas (NFD en Mac, NFC en Linux), así que
+    en el layout del destino solo usamos ASCII plano.
+    """
     value = value.strip().strip("/")
     value = value.replace("/", "_")
+    # Descompone (NFKD) y descarta las marcas diacríticas: ó->o, ñ->n, ü->u…
+    value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
     value = re.sub(r"[^A-Za-z0-9._-]", "_", value)
     return value or "root"
 
