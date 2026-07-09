@@ -35,7 +35,7 @@ class Base(DeclarativeBase):
 AUTH_METHODS = ("key", "password")
 PROTECCIONES = ("single", "raid1", "raid2")  # disco único, raid 1 disco, raid 2 discos
 CONECTORES = ("synology", "plesk_linux")      # tipos de conector de host (ver connectors/)
-TIPOS_ORIGEN = ("carpeta", "config")          # carpeta real | bundle sintético (@ de Synology)
+TIPOS_ORIGEN = ("carpeta", "config")          # carpeta real | "config" = LEGADO (bundle @ de Synology, retirado 070926; la config del DSM se respalda con la herramienta nativa)
 ESTADOS_ORIGEN = ("activo", "desaparecido")   # "desaparecido" => tareas huérfanas
 TIPOS_TAREA = ("espejo", "incremental")
 ESTADOS_TAREA = ("esperando", "en_progreso", "terminada", "fallida")

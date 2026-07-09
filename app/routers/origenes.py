@@ -230,6 +230,20 @@ async def host_eliminar(host_id: int, _: int = Depends(require_login)):
     return RedirectResponse("/origenes", status_code=303)
 
 
+@router.post("/origen/{origen_id}/eliminar")
+async def origen_eliminar(origen_id: int, _: int = Depends(require_login)):
+    """Elimina un origen SOLO si está "desaparecido" (huérfano tras la re-exploración).
+
+    Los orígenes activos los gobierna el descubrimiento del conector; borrarlos a mano
+    solo generaría su re-creación. Cascada: tareas, ejecuciones e histórico de tamaño.
+    """
+    with session_scope() as session:
+        o = session.get(Origen, origen_id)
+        if o and o.estado == "desaparecido":
+            session.delete(o)
+    return RedirectResponse("/origenes", status_code=303)
+
+
 @router.post("/host/{host_id}/test")
 async def host_test(host_id: int, _: int = Depends(require_login)):
     box = get_secret_box()

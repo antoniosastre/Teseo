@@ -52,6 +52,12 @@
           {% else %}
             <a class="link" href="/origenes/origen/{{ o.id }}">Configurar</a>
           {% endif %}
+          {% if o.estado == 'desaparecido' %}
+            <form method="post" action="/origenes/origen/{{ o.id }}/eliminar" class="inline"
+                  onsubmit="return confirm('¿Eliminar el origen huérfano «{{ o.nombre }}» con sus tareas e historial?')">
+              <button class="link danger">Eliminar</button>
+            </form>
+          {% endif %}
         </td>
       </tr>
     {% endfor %}

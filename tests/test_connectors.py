@@ -50,23 +50,20 @@ def test_parse_ls_ap_distingue_dirs():
 
 # --- Reglas de orígenes por volumen ------------------------------------------
 
-def test_origenes_bundle_configuracion_y_carpetas():
+def test_origenes_solo_carpetas_compartidas():
+    """Las carpetas "@" (sistema) NO generan orígenes: la configuración del DSM se
+    respalda con la herramienta nativa de Synology, no con rsync (decisión 070926)."""
     entradas = [
         _Entrada("@appstore", True), _Entrada("@database", True),
         _Entrada("web", True), _Entrada("documentos", True), _Entrada("suelto.txt", False),
     ]
     origenes = _origenes_de_volumen("/volume1", entradas)
     nombres = [(o.nombre, o.tipo, o.ruta) for o in origenes]
-    assert ("Configuración", "config", "/volume1") in nombres
-    assert ("web", "carpeta", "/volume1/web") in nombres
-    assert ("documentos", "carpeta", "/volume1/documentos") in nombres
-    # Un fichero suelto (no dir, no "@") no es un origen.
-    assert all(o.nombre != "suelto.txt" for o in origenes)
-
-
-def test_sin_carpetas_arroba_no_hay_bundle():
-    entradas = [_Entrada("web", True)]
-    origenes = _origenes_de_volumen("/volume1", entradas)
+    assert nombres == [
+        ("web", "carpeta", "/volume1/web"),
+        ("documentos", "carpeta", "/volume1/documentos"),
+    ]
+    # Ni bundle "Configuración", ni ficheros sueltos, ni carpetas "@".
     assert all(o.tipo != "config" for o in origenes)
 
 
@@ -81,12 +78,13 @@ def test_descubrir_para_en_primer_volumen_inexistente():
     vols = SynologyConnector().descubrir(_fake_synology(fs))
     assert [v.nombre for v in vols] == ["volume1", "volume2"]
     v1 = {o.nombre for o in vols[0].origenes}
-    assert v1 == {"Configuración", "web", "fotos"}
+    assert v1 == {"web", "fotos"}  # @appstore se ignora (sin bundle Configuración)
     v2 = {o.nombre for o in vols[1].origenes}
-    assert v2 == {"documentos"}  # sin "@" -> sin bundle
+    assert v2 == {"documentos"}
 
 
 def test_fuente_rsync_config_filtra_arroba():
+    # LEGADO: orígenes tipo "config" anteriores al 070926 que sigan en BD.
     ruta, filtros = SynologyConnector().fuente_rsync("config", "/volume1")
     assert ruta == "/volume1"
     assert "--include=@*" in filtros and "--exclude=*" in filtros
