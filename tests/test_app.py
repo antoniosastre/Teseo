@@ -222,6 +222,28 @@ def test_finalize_parcial_marca_terminada(auth_client):
         assert e.bytes_transferidos == 1234
 
 
+def test_eliminar_origen_solo_si_desaparecido(auth_client):
+    """Un origen activo no se puede borrar a mano; uno huérfano sí (con cascada)."""
+    from app.models import Ejecucion, Origen
+
+    oid, did = _crear_entorno()
+    auth_client.post(f"/origenes/origen/{oid}/tarea", data={
+        "destino_id": did, "tipo": "espejo", "cron": "0 2 * * *", "retencion_dias": 5},
+        follow_redirects=False)
+    # Activo: el POST no borra nada.
+    auth_client.post(f"/origenes/origen/{oid}/eliminar", follow_redirects=False)
+    with session_scope() as s:
+        assert s.get(Origen, oid) is not None
+    # Desaparecido: se borra con sus tareas (cascada).
+    with session_scope() as s:
+        s.get(Origen, oid).estado = "desaparecido"
+    r = auth_client.post(f"/origenes/origen/{oid}/eliminar", follow_redirects=False)
+    assert r.status_code == 303
+    with session_scope() as s:
+        assert s.get(Origen, oid) is None
+        assert s.query(Tarea).count() == 0
+
+
 def test_pantallas_wizard_y_detalle_renderizan(auth_client):
     oid, did = _crear_entorno()
     with session_scope() as s:

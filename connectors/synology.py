@@ -3,17 +3,18 @@
 Reglas de descubrimiento:
   - Explora /volume1, /volume2, ... de forma incremental. Se detiene en el
     primer /volumeN que no exista.
-  - En cada volumen:
-      * Si hay entradas que empiezan por "@" (carpetas de sistema/aplicaciones),
-        crea un origen "Configuración" (tipo "config") que copiará todo lo que
-        empiece por "@".
-      * Crea un origen (tipo "carpeta") por cada carpeta adicional (que no
-        empiece por "@"): son las carpetas compartidas del NAS.
+  - En cada volumen crea un origen (tipo "carpeta") por cada carpeta compartida
+    (directorio que NO empiece por "@"). Las carpetas "@" (sistema/aplicaciones)
+    se ignoran: la configuración del DSM se respalda con la herramienta nativa
+    de Synology (Panel de control → Copia de seguridad de configuración), que
+    lo hace de forma coherente; un rsync de esas carpetas internas no lo es.
+    (Decisión del usuario, 070926. Antes existía un bundle sintético
+    "Configuración" tipo "config"; el manejo de ese tipo se conserva más abajo
+    como LEGADO para orígenes que aún existan en BD.)
 
 Tratamiento en rsync:
   - "carpeta": se copia la ruta tal cual.
-  - "config":  se copia la raíz del volumen filtrando solo lo que empieza por
-    "@" (``--include=@*`` + ``--exclude=*``).
+  - "config" (legado): raíz del volumen filtrando solo lo que empieza por "@".
 """
 from __future__ import annotations
 
@@ -57,17 +58,13 @@ def _listar_entradas(ejecutar: Ejecutar, ruta: str) -> list[_Entrada]:
 
 
 def _origenes_de_volumen(vol: str, entradas: list[_Entrada]) -> list[OrigenDescubierto]:
-    origenes: list[OrigenDescubierto] = []
-    # Bundle "Configuración": existe si hay al menos una entrada que empiece por "@".
-    if any(e.nombre.startswith("@") for e in entradas):
-        origenes.append(OrigenDescubierto(nombre="Configuración", tipo="config", ruta=vol))
-    # Un origen por cada carpeta compartida (directorio que no empiece por "@").
-    for e in entradas:
-        if e.es_dir and not e.nombre.startswith("@"):
-            origenes.append(
-                OrigenDescubierto(nombre=e.nombre, tipo="carpeta", ruta=f"{vol}/{e.nombre}")
-            )
-    return origenes
+    # Un origen por cada carpeta compartida. Las "@" (sistema) se ignoran: la
+    # configuración se respalda con la herramienta nativa del DSM, no con rsync.
+    return [
+        OrigenDescubierto(nombre=e.nombre, tipo="carpeta", ruta=f"{vol}/{e.nombre}")
+        for e in entradas
+        if e.es_dir and not e.nombre.startswith("@")
+    ]
 
 
 class SynologyConnector:
@@ -95,14 +92,15 @@ class SynologyConnector:
         # los filtros por orden, primer match).
         excluir_eadir = "--exclude=@eaDir"
         if tipo_origen == "config":
-            # Copiar solo lo que empieza por "@" en la raíz del volumen (menos @eaDir).
+            # LEGADO: orígenes "Configuración" creados antes del 070926 que sigan en BD.
+            # Copia solo lo que empieza por "@" en la raíz del volumen (menos @eaDir).
             return ruta, [excluir_eadir, "--include=@*", "--include=@*/**", "--exclude=*"]
         return ruta, [excluir_eadir]
 
     def medir_tamano(self, ejecutar, tipo_origen: str, ruta: str) -> int | None:
         q = shlex.quote(ruta)
         if tipo_origen == "config":
-            # Suma del tamaño de todo lo que empieza por "@" en la raíz del volumen.
+            # LEGADO (ver fuente_rsync): tamaño de todo lo "@" en la raíz del volumen.
             cmd = f"du -scb {q}/@* 2>/dev/null | tail -1 | cut -f1"
         else:
             cmd = f"du -sb {q} 2>/dev/null | cut -f1"
