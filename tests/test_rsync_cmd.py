@@ -55,6 +55,15 @@ def test_calcula_tamano_total_antes_de_transferir():
     assert "--info=progress2" in p.command
 
 
+def test_sin_compresion_por_defecto():
+    # -z ahoga la transferencia en LAN (CPU < red); quien copie por WAN lenta
+    # puede añadirlo en rsync_extra.
+    p = _plan()
+    assert " -z " not in f" {p.command} "
+    # Y sigue siendo posible pedirla explícitamente por tarea.
+    assert " -z " in f" {_plan(extra_flags='-z').command} "
+
+
 def test_destino_sin_root_omite_owner_group():
     # Sin root en el destino, chown/mknod son imposibles: pedirlos garantiza el
     # rc 23 en cada copia (típico Mac). Se omiten y rc vuelve a ser señal real.

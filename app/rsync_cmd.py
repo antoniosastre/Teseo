@@ -18,12 +18,16 @@ import shlex
 import unicodedata
 from dataclasses import dataclass
 
-# Flags base por defecto. -a (archivo), -z (compresión), progreso legible.
+# Flags base por defecto. -a (archivo), progreso legible.
+# SIN -z (compresión): en LAN la CPU comprime más despacio de lo que la red
+# transmite y ahoga la transferencia (medido: 6-8 MB/s con -z en gigabit).
+# Para destinos remotos con enlace lento, añadir "-z" en los flags extra de
+# la tarea (rsync_extra).
 # --no-inc-recursive fuerza a rsync a construir la lista COMPLETA de ficheros
 # antes de transferir: así el porcentaje de --info=progress2 es global y real
 # desde el principio (con recursión incremental el % es engañoso: rsync descubre
 # ficheros sobre la marcha, se queda pegado al 0% y pega saltos al final).
-BASE_FLAGS = ["-a", "-z", "--info=progress2", "--stats", "--no-inc-recursive"]
+BASE_FLAGS = ["-a", "--info=progress2", "--stats", "--no-inc-recursive"]
 
 
 # override. Un override es un "modo experto": debe ser UNA invocación de rsync,
