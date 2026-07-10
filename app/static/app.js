@@ -125,6 +125,29 @@
     toggleOpciones();
   }
 
+  // --- Creación de tareas en lote (orígenes) ---
+  var lotePanel = document.getElementById("lote-form");
+  if (lotePanel) {
+    var refreshLote = function () {
+      var marcados = document.querySelectorAll(".lote-check:checked").length;
+      document.getElementById("lote-count").textContent = marcados;
+      if (marcados > 0) lotePanel.removeAttribute("hidden");
+      else lotePanel.setAttribute("hidden", "");
+    };
+    document.querySelectorAll(".lote-check").forEach(function (cb) {
+      cb.addEventListener("change", refreshLote);
+    });
+    // Checkbox de cabecera: marca/desmarca todos los orígenes de su volumen.
+    document.querySelectorAll(".lote-vol-all").forEach(function (all) {
+      all.addEventListener("change", function () {
+        all.closest("table").querySelectorAll(".lote-check").forEach(function (cb) {
+          cb.checked = all.checked;
+        });
+        refreshLote();
+      });
+    });
+  }
+
   // --- Estado en vivo por SSE (orígenes / destinos) ---
   if (document.querySelector("[data-tarea-bar], [data-host], [data-destino]")) {
     try {

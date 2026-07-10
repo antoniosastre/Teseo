@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Orígenes{% endblock %}
 {% set copia_label = {'correcta':'Correcta','sin_copia':'Sin copia','en_proceso':'En proceso','error':'Error','pendiente':'Pendiente'} %}
+{% set err_label = {'cron-invalido':'La expresión cron no es válida.','lote-sin-origenes':'No hay ningún origen seleccionado.','origen-o-destino-invalido':'Origen o destino inválido.'} %}
 {% block content %}
 <div class="page-head">
   <h1>Orígenes</h1>
@@ -8,6 +9,13 @@
     <a href="/origenes/host/nuevo" class="btn primary">+ Añadir host</a>
   </div>
 </div>
+
+{% if error %}<div class="alert error">{{ err_label.get(error, error) }}</div>{% endif %}
+{% if lote_creadas is not none %}
+<div class="alert {{ 'error' if lote_creadas == '0' else '' }}">
+  Tareas en lote: {{ lote_creadas }} creada(s){% if lote_omitidas and lote_omitidas != '0' %}, {{ lote_omitidas }} omitida(s) (duplicadas o huérfanas){% endif %}.
+</div>
+{% endif %}
 
 {% for h in hosts %}
 <section class="host-block">
@@ -29,11 +37,18 @@
   <div class="volumen-head">📦 {{ v.nombre }} <span class="badge proteccion-{{ v.proteccion }}">{{ {'single':'Sin protección','raid1':'RAID 1 disco','raid2':'RAID 2 discos'}[v.proteccion] }}</span></div>
   <table class="data sub">
     <thead><tr>
+      <th class="lote-col"><input type="checkbox" class="lote-vol-all" title="Seleccionar todo el volumen"></th>
       <th>Origen</th><th>Tamaño</th><th>Protección</th><th>Estado copia</th><th>Última copia OK</th><th></th>
     </tr></thead>
     <tbody>
     {% for o in v.origenes %}
       <tr {% if o.estado == 'desaparecido' %}class="huerfano"{% endif %}>
+        <td class="lote-col">
+          {% if o.estado != 'desaparecido' %}
+          <input type="checkbox" class="lote-check" name="origen_ids" value="{{ o.id }}" form="lote-form"
+                 title="Seleccionar {{ o.nombre }} para crear tarea en lote">
+          {% endif %}
+        </td>
         <td>
           {% if o.tipo == 'config' %}🧩{% else %}📁{% endif %} {{ o.nombre }}
           {% if o.estado == 'desaparecido' %}<span class="badge estado-fallida" title="El origen ya no existe: tareas huérfanas">desaparecido</span>{% endif %}
@@ -70,4 +85,27 @@
 {% else %}
 <p class="muted">No hay hosts. Empieza por <a href="/origenes/host/nuevo">añadir un host</a>.</p>
 {% endfor %}
+
+{% if hosts and destinos %}
+<form id="lote-form" method="post" action="/origenes/tareas-lote" class="lote-panel" hidden>
+  <strong><span id="lote-count">0</span> orígenes seleccionados</strong>
+  <label>Destino
+    <select name="destino_id" required>
+      {% for d in destinos %}<option value="{{ d.id }}">{{ d.nombre }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Tipo
+    <select name="tipo">
+      {% for t in tipos %}<option value="{{ t }}">{{ {'espejo':'Espejo','incremental':'Incremental'}[t] }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Cron
+    <input name="cron" value="0 2 * * *" required size="10">
+  </label>
+  <label>Retención (días)
+    <input name="retencion_dias" type="number" min="1" value="7" size="4">
+  </label>
+  <button type="submit" class="primary">Crear tareas</button>
+</form>
+{% endif %}
 {% endblock %}
