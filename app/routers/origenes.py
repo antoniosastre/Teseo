@@ -83,8 +83,18 @@ async def listar(request: Request, _: int = Depends(require_login)):
                 "ubicacion": h.ubicacion.nombre if h.ubicacion else "—",
                 "volumenes": volumenes,
             })
+        # Para el panel de creación de tareas en lote.
+        destinos = [
+            {"id": d.id, "nombre": d.nombre}
+            for d in session.scalars(select(Destino).order_by(Destino.nombre))
+        ]
     return templates.TemplateResponse(
-        "origenes.html", {"request": request, "active": "origenes", "hosts": hosts_data}
+        "origenes.html",
+        {"request": request, "active": "origenes", "hosts": hosts_data,
+         "destinos": destinos, "tipos": TIPOS_TAREA,
+         "lote_creadas": request.query_params.get("creadas"),
+         "lote_omitidas": request.query_params.get("omitidas"),
+         "error": request.query_params.get("error")},
     )
 
 
@@ -347,6 +357,59 @@ async def tarea_crear(
             comando_rsync=comando_rsync.strip() or None,
         ))
     return RedirectResponse(f"/origenes/origen/{origen_id}", status_code=303)
+
+
+@router.post("/tareas-lote")
+async def tareas_lote(
+    origen_ids: list[int] = Form([]),
+    destino_id: int = Form(...),
+    tipo: str = Form("espejo"),
+    cron: str = Form("0 2 * * *"),
+    retencion_dias: int = Form(7),
+    _: int = Depends(require_login),
+):
+    """Crea una tarea individual por cada origen seleccionado, con los mismos
+    destino/tipo/cron/retención. Omite duplicados y orígenes desaparecidos."""
+    from croniter import croniter
+
+    def fail(msg: str):
+        return RedirectResponse(f"/origenes?error={msg}", status_code=303)
+
+    if not origen_ids:
+        return fail("lote-sin-origenes")
+    try:
+        if not croniter.is_valid(cron):
+            return fail("cron-invalido")
+    except Exception:  # noqa: BLE001
+        return fail("cron-invalido")
+
+    creadas = omitidas = 0
+    with session_scope() as session:
+        d = session.get(Destino, destino_id)
+        if not d:
+            return fail("origen-o-destino-invalido")
+        for oid in origen_ids:
+            o = session.get(Origen, oid)
+            if not o or o.estado == "desaparecido":
+                omitidas += 1
+                continue
+            dup = session.scalar(
+                select(Tarea).where(
+                    Tarea.origen_id == oid, Tarea.destino_id == destino_id, Tarea.tipo == tipo,
+                )
+            )
+            if dup:
+                omitidas += 1
+                continue
+            session.add(Tarea(
+                origen_id=oid,
+                destino_id=destino_id,
+                tipo=tipo if tipo in TIPOS_TAREA else "espejo",
+                cron=cron.strip(),
+                retencion_dias=max(1, retencion_dias),
+            ))
+            creadas += 1
+    return RedirectResponse(f"/origenes?creadas={creadas}&omitidas={omitidas}", status_code=303)
 
 
 @router.post("/preview")

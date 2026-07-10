@@ -222,6 +222,49 @@ def test_finalize_parcial_marca_terminada(auth_client):
         assert e.bytes_transferidos == 1234
 
 
+def test_tareas_en_lote(auth_client):
+    """Crea una tarea por origen seleccionado con los mismos parámetros; omite
+    duplicados y huérfanos; valida el cron; y la vista pinta el panel."""
+    oid, did = _crear_entorno()
+    with session_scope() as s:
+        vol = s.query(Volumen).first()
+        o2 = Origen(volumen_id=vol.id, nombre="fotos", tipo="carpeta", ruta="/volume1/fotos")
+        o3 = Origen(volumen_id=vol.id, nombre="viejo", tipo="carpeta", ruta="/volume1/viejo",
+                    estado="desaparecido")
+        s.add_all([o2, o3])
+        s.flush()
+        o2id, o3id = o2.id, o3.id
+
+    # La vista general pinta los checkboxes y el panel de lote.
+    html = auth_client.get("/origenes").text
+    assert "lote-form" in html and "lote-check" in html
+
+    # Cron inválido -> nada creado.
+    r = auth_client.post("/origenes/tareas-lote", data={
+        "origen_ids": [oid, o2id], "destino_id": did, "tipo": "espejo",
+        "cron": "no es cron", "retencion_dias": 7}, follow_redirects=False)
+    assert "cron-invalido" in r.headers["location"]
+    with session_scope() as s:
+        assert s.query(Tarea).count() == 0
+
+    # Lote válido: 2 creadas (el huérfano se omite).
+    r = auth_client.post("/origenes/tareas-lote", data={
+        "origen_ids": [oid, o2id, o3id], "destino_id": did, "tipo": "espejo",
+        "cron": "0 3 * * *", "retencion_dias": 10}, follow_redirects=False)
+    assert "creadas=2" in r.headers["location"] and "omitidas=1" in r.headers["location"]
+    with session_scope() as s:
+        tareas = s.query(Tarea).all()
+        assert len(tareas) == 2
+        assert all(t.cron == "0 3 * * *" and t.retencion_dias == 10 for t in tareas)
+        assert {t.origen_id for t in tareas} == {oid, o2id}
+
+    # Repetir el lote: todo son duplicados -> 0 creadas, 3 omitidas.
+    r = auth_client.post("/origenes/tareas-lote", data={
+        "origen_ids": [oid, o2id, o3id], "destino_id": did, "tipo": "espejo",
+        "cron": "0 3 * * *", "retencion_dias": 10}, follow_redirects=False)
+    assert "creadas=0" in r.headers["location"] and "omitidas=3" in r.headers["location"]
+
+
 def test_eliminar_origen_solo_si_desaparecido(auth_client):
     """Un origen activo no se puede borrar a mano; uno huérfano sí (con cascada)."""
     from app.models import Ejecucion, Origen
