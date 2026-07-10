@@ -67,6 +67,14 @@ def test_origenes_solo_carpetas_compartidas():
     assert all(o.tipo != "config" for o in origenes)
 
 
+def test_carpeta_destino_teseo_se_ignora():
+    """La compartida "Teseo" es el destino de copias por convención: descubrirla
+    como origen crearía copias de copias (decisión 071026)."""
+    entradas = [_Entrada("Teseo", True), _Entrada("teseo", True), _Entrada("web", True)]
+    origenes = _origenes_de_volumen("/volume1", entradas)
+    assert [o.nombre for o in origenes] == ["web"]
+
+
 # --- Descubrimiento completo (multi-volumen, se detiene en el hueco) ---------
 
 def test_descubrir_para_en_primer_volumen_inexistente():
@@ -88,12 +96,16 @@ def test_fuente_rsync_config_filtra_arroba():
     ruta, filtros = SynologyConnector().fuente_rsync("config", "/volume1")
     assert ruta == "/volume1"
     assert "--include=@*" in filtros and "--exclude=*" in filtros
-    # @eaDir se excluye SIEMPRE, y antes de los include para que gane.
-    assert filtros[0] == "--exclude=@eaDir"
+    # Las exclusiones van ANTES de los include para que ganen (primer match).
+    assert filtros.index("--exclude=@eaDir") < filtros.index("--include=@*")
 
 
-def test_fuente_rsync_carpeta_excluye_eadir():
-    # Carpeta normal: sin include/exclude salvo la exclusión de @eaDir.
-    assert SynologyConnector().fuente_rsync("carpeta", "/volume1/web") == (
-        "/volume1/web", ["--exclude=@eaDir"]
-    )
+def test_fuente_rsync_carpeta_excluye_metadatos_y_transitorios():
+    """Papelera, snapshots y metadatos de Finder/Explorador nunca se copian."""
+    ruta, filtros = SynologyConnector().fuente_rsync("carpeta", "/volume1/web")
+    assert ruta == "/volume1/web"
+    for excl in ("@eaDir", "#recycle", "#snapshot", ".DS_Store", "._*",
+                 "Thumbs.db", "desktop.ini", "~$*", "*.lock"):
+        assert f"--exclude={excl}" in filtros
+    # Solo exclusiones: una carpeta normal no lleva ningún --include.
+    assert not any(f.startswith("--include") for f in filtros)
