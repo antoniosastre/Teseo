@@ -8,6 +8,7 @@ contraseñas ni intervención manual.
 from __future__ import annotations
 
 import shlex
+import threading
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -17,6 +18,12 @@ from app.db import session_scope
 from app.models import Destino, Origen, SshKeypair, Tarea
 from app.remote import SshError, SshTarget, connect, run
 from app.services import ssh_target_for_destino, ssh_target_for_host
+
+# Serializa la provisión de confianza: dos tareas lanzadas a la vez contra el
+# mismo destino tocan el mismo authorized_keys (y validan desde el mismo origen
+# escribiendo known_hosts). La provisión es una vez por tarea y dura segundos;
+# las copias en sí siguen siendo paralelas.
+_PROVISION_LOCK = threading.Lock()
 
 
 def generate_keypair() -> tuple[str, str]:
@@ -70,15 +77,23 @@ def _install_public_key_on_destino(destino: SshTarget, public_ssh: str) -> None:
                 raise SshError(f"No se pudo autorizar la clave en el destino: {err}")
 
 
-def _validate_trust(origin: SshTarget, destino: SshTarget, key_path: str) -> None:
-    """Comprueba desde el origen que el SSH al destino funciona con la clave."""
-    test = (
+def _validate_cmd(destino: SshTarget, key_path: str) -> str:
+    """Comando de validación (extraído para poder testearlo).
+
+    IdentitiesOnly=yes: sin él, el ssh del origen ofrece sus claves por defecto
+    ANTES que la de la tarea y puede agotar MaxAuthTries del destino.
+    """
+    return (
         f"ssh -i {shlex.quote(key_path)} -p {destino.port} "
-        f"-o StrictHostKeyChecking=accept-new -o BatchMode=yes "
+        f"-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o IdentitiesOnly=yes "
         f"{shlex.quote(destino.usuario + '@' + destino.host)} echo teseo-trust-ok"
     )
+
+
+def _validate_trust(origin: SshTarget, destino: SshTarget, key_path: str) -> None:
+    """Comprueba desde el origen que el SSH al destino funciona con la clave."""
     with connect(origin) as client:
-        rc, out, err = run(client, test, timeout=30)
+        rc, out, err = run(client, _validate_cmd(destino, key_path), timeout=30)
     if rc != 0 or "teseo-trust-ok" not in out:
         raise SshError(f"La confianza origen→destino no funciona: {err or out}")
 
@@ -114,13 +129,16 @@ def ensure_trust(tarea_id: int, box: SecretBox) -> str:
         already = keypair.estado == "provisionada"
         kp_id = keypair.id
 
-    # Operaciones de red fuera de la transacción.
-    key_path = _install_private_key_on_origin(origin_target, tarea_id, private_pem)
-    if not already:
-        _install_public_key_on_destino(destino_target, public_ssh)
-        _validate_trust(origin_target, destino_target, key_path)
-        with session_scope() as session:
-            kp = session.get(SshKeypair, kp_id)
-            if kp:
-                kp.estado = "provisionada"
+    # Operaciones de red fuera de la transacción, SERIALIZADAS entre workers:
+    # dos provisiones simultáneas al mismo destino se pisan (authorized_keys,
+    # known_hosts del origen) y la segunda falla con "Permission denied".
+    with _PROVISION_LOCK:
+        key_path = _install_private_key_on_origin(origin_target, tarea_id, private_pem)
+        if not already:
+            _install_public_key_on_destino(destino_target, public_ssh)
+            _validate_trust(origin_target, destino_target, key_path)
+            with session_scope() as session:
+                kp = session.get(SshKeypair, kp_id)
+                if kp:
+                    kp.estado = "provisionada"
     return key_path
