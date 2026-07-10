@@ -11,9 +11,13 @@ Reglas de descubrimiento:
     (Decisión del usuario, 070926. Antes existía un bundle sintético
     "Configuración" tipo "config"; el manejo de ese tipo se conserva más abajo
     como LEGADO para orígenes que aún existan en BD.)
+  - La carpeta compartida "Teseo" también se ignora: por convención es el
+    DESTINO donde otros orígenes depositan sus copias — descubrirla como
+    origen crearía copias de copias (decisión del usuario, 071026).
 
 Tratamiento en rsync:
-  - "carpeta": se copia la ruta tal cual.
+  - "carpeta": se copia la ruta tal cual, excluyendo metadatos y transitorios
+    (_EXCLUSIONES: papelera #recycle, snapshots, .DS_Store, Thumbs.db, locks…).
   - "config" (legado): raíz del volumen filtrando solo lo que empieza por "@".
 """
 from __future__ import annotations
@@ -25,6 +29,25 @@ from connectors import Ejecutar, OpcionDescubrimiento, OrigenDescubierto, Volume
 
 # Límite de volúmenes a explorar: cota de seguridad ante respuestas inesperadas.
 _MAX_VOLUMENES = 64
+
+# Carpeta compartida que por convención actúa de DESTINO de copias en un
+# Synology: nunca se descubre como origen (evita copias de copias).
+_CARPETA_DESTINO = "teseo"  # comparación sin mayúsculas
+
+# Exclusiones de rsync para TODA copia Synology: metadatos de escritorio y
+# transitorios, nunca datos reales. rsync aplica los filtros por orden y gana
+# el primer match, así que van ANTES de cualquier --include.
+_EXCLUSIONES = [
+    "--exclude=@eaDir",       # índices/miniaturas internos de Synology
+    "--exclude=#recycle",     # papelera de reciclaje (raíz de cada compartida)
+    "--exclude=#snapshot",    # snapshots btrfs visibles (copiarlos multiplica la copia)
+    "--exclude=.DS_Store",    # metadatos del Finder (macOS)
+    "--exclude=._*",          # ficheros AppleDouble del Finder en volúmenes de red
+    "--exclude=Thumbs.db",    # miniaturas del Explorador de Windows
+    "--exclude=desktop.ini",  # metadatos del Explorador de Windows
+    "--exclude=~$*",          # bloqueos temporales de Office (documento abierto)
+    "--exclude=*.lock",       # ficheros de bloqueo genéricos (transitorios)
+]
 
 
 @dataclass
@@ -58,12 +81,15 @@ def _listar_entradas(ejecutar: Ejecutar, ruta: str) -> list[_Entrada]:
 
 
 def _origenes_de_volumen(vol: str, entradas: list[_Entrada]) -> list[OrigenDescubierto]:
-    # Un origen por cada carpeta compartida. Las "@" (sistema) se ignoran: la
-    # configuración se respalda con la herramienta nativa del DSM, no con rsync.
+    # Un origen por cada carpeta compartida. Se ignoran: las "@" (sistema; la
+    # configuración se respalda con la herramienta nativa del DSM, no con rsync)
+    # y la carpeta destino de copias "Teseo" (evita copias de copias).
     return [
         OrigenDescubierto(nombre=e.nombre, tipo="carpeta", ruta=f"{vol}/{e.nombre}")
         for e in entradas
-        if e.es_dir and not e.nombre.startswith("@")
+        if e.es_dir
+        and not e.nombre.startswith("@")
+        and e.nombre.lower() != _CARPETA_DESTINO
     ]
 
 
@@ -87,15 +113,13 @@ class SynologyConnector:
         return volumenes
 
     def fuente_rsync(self, tipo_origen: str, ruta: str) -> tuple[str, list[str]]:
-        # @eaDir son los índices/miniaturas internos de Synology: nunca se copian.
-        # Va PRIMERO para que gane a cualquier --include posterior (rsync aplica
-        # los filtros por orden, primer match).
-        excluir_eadir = "--exclude=@eaDir"
+        # Las exclusiones van PRIMERO para que ganen a cualquier --include
+        # posterior (rsync aplica los filtros por orden, primer match).
         if tipo_origen == "config":
             # LEGADO: orígenes "Configuración" creados antes del 070926 que sigan en BD.
-            # Copia solo lo que empieza por "@" en la raíz del volumen (menos @eaDir).
-            return ruta, [excluir_eadir, "--include=@*", "--include=@*/**", "--exclude=*"]
-        return ruta, [excluir_eadir]
+            # Copia solo lo que empieza por "@" en la raíz del volumen (menos exclusiones).
+            return ruta, [*_EXCLUSIONES, "--include=@*", "--include=@*/**", "--exclude=*"]
+        return ruta, list(_EXCLUSIONES)
 
     def medir_tamano(self, ejecutar, tipo_origen: str, ruta: str) -> int | None:
         q = shlex.quote(ruta)
