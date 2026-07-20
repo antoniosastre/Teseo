@@ -55,6 +55,15 @@ def test_calcula_tamano_total_antes_de_transferir():
     assert "--info=progress2" in p.command
 
 
+def test_no_cruza_sistemas_de_ficheros():
+    # -x: las carpetas remotas montadas dentro del origen (CIFS/NFS) son otra
+    # fuente de datos — sin -x rsync arrastraría servidores enteros. Los
+    # symlinks ya se guardan como enlaces sin seguirse (-a incluye -l).
+    p = _plan()
+    assert " -x " in f" {p.command} "
+    assert " -L " not in f" {p.command} "   # jamás seguir symlinks
+
+
 def test_sin_compresion_por_defecto():
     # -z ahoga la transferencia en LAN (CPU < red); quien copie por WAN lenta
     # puede añadirlo en rsync_extra.

@@ -105,7 +105,7 @@ def test_fuente_rsync_carpeta_excluye_metadatos_y_transitorios():
     ruta, filtros = SynologyConnector().fuente_rsync("carpeta", "/volume1/web")
     assert ruta == "/volume1/web"
     for excl in ("@eaDir", "#recycle", "#snapshot", ".DS_Store", "._*",
-                 "Thumbs.db", "desktop.ini", "~$*", "*.lock"):
+                 "Thumbs.db", "desktop.ini", "~$*", "*.lock", ".TemporaryItems"):
         assert f"--exclude={excl}" in filtros
     # Solo exclusiones: una carpeta normal no lleva ningún --include.
     assert not any(f.startswith("--include") for f in filtros)

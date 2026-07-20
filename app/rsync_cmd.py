@@ -19,6 +19,12 @@ import unicodedata
 from dataclasses import dataclass
 
 # Flags base por defecto. -a (archivo), progreso legible.
+# -x (--one-file-system): NO cruzar fronteras de sistema de ficheros. Las
+# carpetas remotas montadas DENTRO de un origen (CIFS/NFS hacia otro servidor)
+# son otra fuente de datos con su propio backup: sin -x, rsync descendería en
+# ellas y arrastraría servidores enteros a través del origen. El punto de
+# montaje queda como carpeta vacía en la réplica. (Los enlaces simbólicos ya
+# se guardan como enlaces sin seguirse: -a incluye -l.)
 # SIN -z (compresión): en LAN la CPU comprime más despacio de lo que la red
 # transmite y ahoga la transferencia (medido: 6-8 MB/s con -z en gigabit).
 # Para destinos remotos con enlace lento, añadir "-z" en los flags extra de
@@ -27,7 +33,7 @@ from dataclasses import dataclass
 # antes de transferir: así el porcentaje de --info=progress2 es global y real
 # desde el principio (con recursión incremental el % es engañoso: rsync descubre
 # ficheros sobre la marcha, se queda pegado al 0% y pega saltos al final).
-BASE_FLAGS = ["-a", "--info=progress2", "--stats", "--no-inc-recursive"]
+BASE_FLAGS = ["-a", "-x", "--info=progress2", "--stats", "--no-inc-recursive"]
 
 
 # override. Un override es un "modo experto": debe ser UNA invocación de rsync,

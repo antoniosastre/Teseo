@@ -47,6 +47,7 @@ _EXCLUSIONES = [
     "--exclude=desktop.ini",  # metadatos del Explorador de Windows
     "--exclude=~$*",          # bloqueos temporales de Office (documento abierto)
     "--exclude=*.lock",       # ficheros de bloqueo genéricos (transitorios)
+    "--exclude=.TemporaryItems",  # carpeta temporal que macOS crea en shares SMB
 ]
 
 
