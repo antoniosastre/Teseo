@@ -121,6 +121,12 @@ def test_dashboard_muestra_velocidad_en_progreso(auth_client):
         t.estado, t.porcentaje, t.velocidad = "en_progreso", 42, "4.72MB/s"
     html = auth_client.get("/").text
     assert "data-tarea-vel" in html and "4.72MB/s" in html
+    assert "progress-fill done" not in html      # al 42% la barra sigue cian
+    # Al 100% la barra se pinta verde (clase done) ya en el render inicial.
+    with session_scope() as s:
+        t = s.query(Tarea).first()
+        t.estado, t.porcentaje = "terminada", 100
+    assert "progress-fill done" in auth_client.get("/").text
 
 
 def test_cancelar_marca_bandera_solo_en_progreso(auth_client):
