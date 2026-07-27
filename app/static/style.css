@@ -154,6 +154,9 @@ tr.huerfano td{background:oklch(0.66 0.21 25 / 5%)}
   width:90px;display:inline-block;vertical-align:middle;margin-right:.4rem}
 .progress-fill{height:100%;background:var(--primary);
   box-shadow:0 0 8px oklch(0.85 0.132 195 / 60%);transition:width .4s}
+/* Copia completada (100%): la barra pasa de cian (actividad) a verde (éxito). */
+.progress-fill.done,.progressbar-fill.done{background:var(--green);
+  box-shadow:0 0 8px oklch(0.75 0.14 160 / 50%)}
 .usage-bar{height:10px;background:var(--panel2);border-radius:5px;overflow:hidden;margin:.4rem 0}
 .usage-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--yellow),var(--orange))}
 

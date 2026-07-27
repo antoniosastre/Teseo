@@ -22,8 +22,8 @@
       <td>{{ t.tipo }}{% if not t.activa %} <small>(desactivada)</small>{% endif %}</td>
       <td><span class="badge estado-{{ t.estado }}" data-tarea-estado="{{ t.id }}">{{ t.estado }}</span></td>
       <td>
-        <div class="progress"><div class="progress-fill" data-tarea-bar="{{ t.id }}"
-             style="width: {{ t.porcentaje }}%"></div></div>
+        <div class="progress"><div class="progress-fill{% if t.porcentaje >= 100 %} done{% endif %}"
+             data-tarea-bar="{{ t.id }}" style="width: {{ t.porcentaje }}%"></div></div>
         <small class="muted" data-tarea-pct="{{ t.id }}">{{ t.porcentaje }}%</small>
         <small class="muted" data-tarea-vel="{{ t.id }}">{% if t.velocidad %}· {{ t.velocidad }}{% endif %}</small>
       </td>

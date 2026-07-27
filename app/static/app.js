@@ -157,7 +157,11 @@
         Object.keys(data.tareas || {}).forEach(function (id) {
           var t = data.tareas[id];
           var bar = document.querySelector("[data-tarea-bar='" + id + "']");
-          if (bar) bar.style.width = t.porcentaje + "%";
+          if (bar) {
+            bar.style.width = t.porcentaje + "%";
+            // Al 100% la barra pasa de cian (actividad) a verde (éxito).
+            bar.classList.toggle("done", t.porcentaje >= 100);
+          }
           var pct = document.querySelector("[data-tarea-pct='" + id + "']");
           if (pct) pct.textContent = t.porcentaje + "%";
           var vel = document.querySelector("[data-tarea-vel='" + id + "']");
