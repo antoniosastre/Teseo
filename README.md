@@ -33,7 +33,7 @@ La copia se lanza en el origen y continúa aunque se interrumpa la conexión de 
 
 | Área | Componentes |
 | --- | --- |
-| Aplicación | [Python](https://www.python.org/), [FastAPI](https://fastapi.tiangolo.com/), [Jinja](https://jinja.palletsprojects.com/) y [Uvicorn](https://www.uvicorn.org/) |
+| Aplicación | [Python](https://www.python.org/), [FastAPI](https://fastapi.tiangolo.com/), [Jinja](https://jinja.palletsprojects.com/) y [Uvicorn](https://uvicorn.dev/) |
 | Persistencia | [MySQL](https://www.mysql.com/) o [MariaDB](https://mariadb.org/), [SQLAlchemy](https://www.sqlalchemy.org/), [PyMySQL](https://pymysql.readthedocs.io/) y [Alembic](https://alembic.sqlalchemy.org/) |
 | Copias y conexiones | rsync, [OpenSSH](https://www.openssh.com/), [Paramiko](https://www.paramiko.org/) y [croniter](https://github.com/pallets-eco/croniter) |
 | Credenciales | [cryptography](https://cryptography.io/) para cifrado Fernet y [argon2-cffi](https://argon2-cffi.readthedocs.io/) para contraseñas |
