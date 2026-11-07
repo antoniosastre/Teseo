@@ -131,6 +131,12 @@ La estructura del destino es:
 
 Las órdenes generadas conservan los enlaces simbólicos sin seguirlos y utilizan `--one-file-system` para no recorrer otros sistemas de archivos montados dentro de un origen. La compresión está desactivada por defecto; puede añadirse en las opciones avanzadas de una tarea.
 
+Las copias vencidas **esperan turno** en una cola: cada destino admite a la vez las copias indicadas en su ficha (1 por defecto) y cada host de origen las fijadas en **Ajustes → Cola de copias** (1 por defecto), con un máximo global de 3. En discos mecánicos y RAID de discos, varias escrituras simultáneas en el mismo destino rinden mucho menos que encoladas. Una tarea que no cabe no bloquea a las de otros destinos u orígenes, y **Ejecutar ya** pasa delante en la cola.
+
+En las copias incrementales, los históricos caducados se apartan al momento (`.borrando_<fecha>`) y se borran en segundo plano en el destino, así que la ejecución no espera a que termine un borrado de millones de enlaces duros.
+
+El monitor comprueba cada 5 minutos la conexión y el espacio libre de los destinos con `df -Pk`; lo que ocupan las copias (`du -sk`, lento en árboles grandes) lo mide el analizador. Ambas órdenes funcionan en Linux y en macOS. Si el destino es un Mac, indica en su ficha la ruta del rsync de Homebrew (`/usr/local/bin/rsync` en Intel, `/opt/homebrew/bin/rsync` en Apple Silicon): el rsync del sistema es openrsync, con el protocolo 29.
+
 En Synology se omiten las carpetas de sistema que empiezan por `@`, la carpeta compartida de destino `Teseo` y los metadatos/transitorios definidos en el conector. La configuración de DSM (DiskStation Manager) debe respaldarse con la herramienta nativa del fabricante.
 
 En Plesk se descubren suscripciones y configuraciones; las opciones permiten incluir correo, respaldos existentes, volcados de bases de datos y rutas adicionales. **Teseo no genera esos volcados**: copia los archivos preparados externamente y no respalda directamente los archivos de una base de datos en ejecución.

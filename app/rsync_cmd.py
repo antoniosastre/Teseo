@@ -59,6 +59,26 @@ def validate_override(comando: str) -> str | None:
     return None
 
 
+# Ruta del rsync remoto (--rsync-path): absoluta y sin nada que el shell del
+# destino pueda interpretar (espacios, comillas, $, ;…). La ejecuta el shell
+# remoto tal cual, así que solo se admiten caracteres de ruta "planos".
+_RSYNC_REMOTO_RE = re.compile(r"^/[A-Za-z0-9._+/-]+$")
+
+
+def validate_rsync_remoto(ruta: str) -> str | None:
+    """Valida la ruta del rsync del destino. Devuelve mensaje de error o None.
+
+    Vacío es válido (se usa el rsync del PATH del destino).
+    """
+    ruta = (ruta or "").strip()
+    if not ruta:
+        return None
+    if not _RSYNC_REMOTO_RE.match(ruta) or "/../" in ruta or ruta.endswith("/.."):
+        return ("La ruta de rsync en el destino debe ser absoluta (p. ej. /usr/local/bin/rsync) "
+                "y contener solo letras, números y . _ + - /")
+    return None
+
+
 def sanitize_component(value: str) -> str:
     """Convierte una ruta/origen en un nombre de subcarpeta seguro y plano.
 
@@ -127,11 +147,14 @@ def build_plan(
     filtros: list[str] | None = None,
     delete: bool = True,
     timestamp: dt.datetime | None = None,
+    rsync_remoto: str | None = None,
 ) -> RsyncPlan:
     """Genera el plan rsync para una ejecución (espejo o incremental).
 
     ``ruta_origen`` es la ruta a copiar en el host; ``filtros`` son flags de
     include/exclude que aporta el conector (p. ej. el bundle @ de Synology).
+    ``rsync_remoto`` es la ruta del rsync que debe arrancar en el destino
+    (``--rsync-path``); vacío = el del PATH del destino.
     """
     flags = list(BASE_FLAGS)
     # Solo root puede hacer chown o crear dispositivos en el destino. Si la
@@ -164,11 +187,18 @@ def build_plan(
     remote = f"{destino_usuario}@{destino_host}:{dest_target}/"
     transport = ssh_transport(destino_puerto, key_path)
 
+    # rsync del destino: solo si se ha configurado y es una ruta válida (la
+    # validación ya se hizo al guardar el destino; aquí es defensa en profundidad).
+    rsync_path_tokens = []
+    if rsync_remoto and rsync_remoto.strip() and validate_rsync_remoto(rsync_remoto) is None:
+        rsync_path_tokens = [shlex.quote(f"--rsync-path={rsync_remoto.strip()}")]
+
     # Montamos el string respetando que el transporte va como un único argumento.
     tokens = (
         ["rsync"]
         + flags
         + ["-e", shlex.quote(transport)]
+        + rsync_path_tokens
         + filtro_tokens
         + extra
         + [shlex.quote(src), shlex.quote(remote)]
@@ -196,6 +226,7 @@ def preview_command(
     destino_puerto: int = 22,
     extra_flags: str | None = None,
     filtros: list[str] | None = None,
+    rsync_remoto: str | None = None,
 ) -> str:
     """Comando representativo para mostrar en 'opciones avanzadas' del formulario."""
     plan = build_plan(
@@ -211,5 +242,6 @@ def preview_command(
         key_path="~/.ssh/teseo_taskkey",
         extra_flags=extra_flags,
         filtros=filtros,
+        rsync_remoto=rsync_remoto,
     )
     return plan.command

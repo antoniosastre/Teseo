@@ -139,26 +139,53 @@ def list_directories(target: SshTarget, path: str = "/") -> list[str]:
     return [line for line in out.splitlines() if line.strip()]
 
 
-@dataclass
-class DiskUsage:
-    total: int  # bytes del filesystem que contiene la carpeta
-    free: int   # bytes libres
-    backups: int  # bytes ocupados por la carpeta de backups (du)
+# Medir lo que ocupan las copias recorre TODO el árbol del destino (con los
+# históricos por enlaces duros, millones de ficheros): en discos mecánicos puede
+# tardar horas. Se hace en el analizador (cada X horas), nunca en el monitor.
+DU_TIMEOUT_S = 6 * 3600
 
 
-def disk_usage(target: SshTarget, path: str) -> DiskUsage:
-    """Espacio del filesystem (df) y ocupado por la carpeta de backups (du)."""
+def parse_df_posix(salida: str) -> tuple[int, int] | None:
+    """(total, libre) en bytes a partir de la salida de ``df -Pk``.
+
+    ``-P`` (formato POSIX, una línea por sistema de ficheros) y ``-k`` (bloques de
+    1024 bytes) existen tanto en GNU/Linux como en macOS/BSD; ``-B1`` y
+    ``--output`` son solo de GNU. Se busca la secuencia
+    ``<bloques> <usados> <disponibles> <capacidad%>`` en vez de contar columnas,
+    porque el nombre del sistema de ficheros y el punto de montaje pueden llevar
+    espacios.
+    """
+    for linea in reversed(salida.strip().splitlines()):
+        tokens = linea.split()
+        for i in range(len(tokens) - 3):
+            total, usados, libres, capacidad = tokens[i:i + 4]
+            if total.isdigit() and usados.isdigit() and libres.isdigit() and capacidad.endswith("%"):
+                return int(total) * 1024, int(libres) * 1024
+    return None
+
+
+def disk_space(target: SshTarget, path: str) -> tuple[int, int] | None:
+    """Espacio (total, libre) del sistema de ficheros que contiene ``path``.
+
+    Barato (solo ``df``): apto para el monitor de cada pocos minutos. Lanza
+    ``SshError`` si no hay conexión; devuelve None si conecta pero no se puede
+    interpretar ``df`` (el destino sigue siendo accesible).
+    """
     qpath = shlex.quote(path)
     with connect(target) as client:
         run(client, f"mkdir -p {qpath}")
-        # df en bloques de 1 byte: total y disponible del filesystem.
-        rc, out, _ = run(client, f"df -B1 --output=size,avail {qpath} | tail -1")
-        total = free = 0
-        if rc == 0:
-            nums = out.split()
-            if len(nums) >= 2:
-                total, free = int(nums[0]), int(nums[1])
-        # du de la carpeta de backups (puede ser costoso; el caller lo cachea).
-        rc, out, _ = run(client, f"du -sb {qpath} 2>/dev/null | cut -f1")
-        backups = int(out.strip()) if rc == 0 and out.strip().isdigit() else 0
-    return DiskUsage(total=total, free=free, backups=backups)
+        rc, out, _ = run(client, f"df -Pk {qpath}")
+    return parse_df_posix(out) if rc == 0 else None
+
+
+def backups_size(target: SshTarget, path: str, timeout: float = DU_TIMEOUT_S) -> int | None:
+    """Bytes que ocupan las copias en ``path`` (``du -sk``, válido en Linux y macOS).
+
+    Cuenta una sola vez los ficheros con varios enlaces duros (snapshots
+    incrementales). Puede tardar mucho: ver ``DU_TIMEOUT_S``.
+    """
+    qpath = shlex.quote(path)
+    with connect(target) as client:
+        _, out, _ = run(client, f"du -sk {qpath} 2>/dev/null | cut -f1", timeout=timeout)
+    out = out.strip()
+    return int(out) * 1024 if out.isdigit() else None

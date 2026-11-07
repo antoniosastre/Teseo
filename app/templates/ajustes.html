@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Ajustes{% endblock %}
-{% set aviso_label = {'intervalo-guardado':'Intervalo guardado.','analisis-encolado':'Análisis encolado: el daemon lo ejecutará en breve.','ubicacion-en-uso':'No se puede eliminar: la ubicación está en uso.'} %}
+{% set aviso_label = {'intervalo-guardado':'Intervalo guardado.','analisis-encolado':'Análisis encolado: el daemon lo ejecutará en breve.','ubicacion-en-uso':'No se puede eliminar: la ubicación está en uso.','cola-guardada':'Cola de copias guardada.'} %}
 {% block content %}
 <div class="page-head"><h1>Ajustes</h1></div>
 {% if aviso %}<div class="alert ok">{{ aviso_label.get(aviso, aviso) }}</div>{% endif %}
@@ -17,6 +17,20 @@
   </form>
   <form method="post" action="/ajustes/analizar" style="margin-top:1rem">
     <button type="submit" class="secondary">Ejecutar análisis ahora</button>
+  </form>
+</div>
+
+<h2>Cola de copias</h2>
+<div class="form-card">
+  <p class="muted">Las tareas vencidas esperan turno en vez de arrancar todas a la vez.
+  Cada destino tiene su propio límite de copias simultáneas (en su ficha); aquí se fija
+  cuántas copias pueden leer a la vez de un mismo host de origen. En discos mecánicos,
+  1 suele ser lo más rápido.</p>
+  <form method="post" action="/ajustes/cola" class="inline-add">
+    <label>Copias simultáneas por host de origen
+      <input name="max_copias_por_origen" type="number" min="1" max="16" value="{{ max_copias_por_origen }}">
+    </label>
+    <button type="submit" class="primary">Guardar</button>
   </form>
 </div>
 

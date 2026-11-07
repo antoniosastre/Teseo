@@ -85,17 +85,17 @@ app/                      # Web FastAPI + Jinja
   services.py             # ssh_target_*, host_semaforo(), origen_score_bar(), estado_copia(), ultima_copia_ok(), explorar_host()/persistir_descubrimiento()
   settings.py             # ajustes globales (tabla ajustes): intervalo del analizador, bandera run_now
   rsync_cmd.py            # build_plan()/preview_command()/validate_override(): comando rsync, layout, filtros del conector
-  remote.py               # paramiko: connect() (pinning host_key), run(), test_connection(), disk_usage()
+  remote.py               # paramiko: connect() (pinning host_key), run(), test_connection(), disk_space() (df -Pk), backups_size() (du -sk) — portables Linux/macOS
   installer/              # asistente /install (service.py: test_connection, create_database, run_install)
   routers/               # dashboard, auth, ubicaciones, destinos, origenes (wizard+jerarquía), tareas, estado (SSE), ajustes
   templates/ static/      # Jinja + style.css + app.js (SSE, probar conexión, alta inline)
 connectors/               # estrategia por dispositivo: __init__ (interfaz+registro+opciones), synology.py, plesk.py (Plesk Linux: psa.conf→mount-points)
 daemon/                   # Servicio teseod
-  teseod.py               # bucle scheduler (clase Daemon), concurrencia MAX_CONCURRENCY=3, monitor cada 300s
+  teseod.py               # bucle scheduler (clase Daemon) + cola: MAX_CONCURRENCY=3 global, Destino.max_copias por destino y ajuste max_copias_por_origen (elegir_lanzables, pura); monitor cada 300s sin solaparse
   keyprov.py              # ensure_trust(): genera/instala/valida claves SSH origen→destino
   runner.py               # run_tarea(): rsync con streaming de progreso; usa el conector para fuente+filtros
-  retention.py            # set_current_symlink(), apply_retention() (por DÍAS)
-  monitor.py              # check_destinos() (df/du), check_origenes() (accesibilidad + aprende host_key)
+  retention.py            # set_current_symlink(), apply_retention() (por DÍAS; aparta a .borrando_* y borra descolgado con nohup)
+  monitor.py              # check_destinos() (solo df), medir_backups_destinos() (du, lo llama el analizador), check_origenes() (accesibilidad + aprende host_key)
   analyzer.py             # run_analisis(): re-exploración (huérfanos+email) + refresco de tamaños (du+histórico)
   notify.py               # email SMTP (notify_failure, notify_unreachable, notify_orphan)
 scoring/__init__.py       # origen_score()/score_bar()/classify(): fórmula por origen + barra gráfica
@@ -122,6 +122,7 @@ Jerarquía de orígenes: **Host → Volumen → Origen → (0..n) Tarea**. El RA
   estado activo|desaparecido) — UNIQUE(volumen,ruta). "desaparecido" ⇒ tareas huérfanas
 - **historico_tamano**(origen_id, timestamp, bytes) — serie temporal del tamaño
 - **destinos**(nombre único, conexión SSH, host_key, carpeta_base, proteccion, ubicacion_id,
+  max_copias [cola por destino, 1 por defecto], rsync_remoto [--rsync-path, p. ej. Homebrew en Mac],
   estado, espacio_total/backups/libre)
 - **ssh_keypairs**(private_key_cifrada, public_key, fingerprint, estado)
 - **tareas**(origen_id, destino_id, tipo espejo|incremental, cron, comando_rsync override,
@@ -209,6 +210,15 @@ pytest -q          # 14 tests, SQLite en memoria
    `alembic upgrade head`). Analizador de **evolución de tamaño** en el detalle del origen
    (histórico + crecimiento; `services.evolucion_tamano`).
 6. PENDIENTE: múltiples admins UI, cancelación de copias en curso, paginación del historial.
+7. **Cola por destino y destinos macOS** (rama `claude/cola-por-destino-y-destino-mac`, migración
+   0005): cola con límite por destino (`Destino.max_copias`) y por host de origen (ajuste
+   `max_copias_por_origen`), además del global; `df -Pk`/`du -sk` portables y `du` movido al
+   analizador; retención descolgada (`.borrando_*` + `nohup`); `Destino.rsync_remoto` →
+   `--rsync-path`; pantalla `/destinos/{id}/editar` (sin tocar conexión ni carpeta base).
+   Motivo: en destinos con discos mecánicos (RAID de LaCie en un Mac) 2–4 escrituras a la vez
+   bajaban de ~1,5 GB/s a 160–200 MB/s en total.
+   PENDIENTE relacionado: restringir las claves por tarea en `authorized_keys`
+   (`restrict,from=…,command="rrsync …"`) y transporte opcional por servicio rsync (rsync://).
 
 ---
 

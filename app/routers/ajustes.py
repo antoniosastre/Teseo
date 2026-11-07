@@ -10,8 +10,10 @@ from app.deps import require_login
 from app.models import Destino, HostOrigen, Ubicacion
 from app.settings import (
     ANALIZADOR_INTERVALO_HORAS,
+    MAX_COPIAS_POR_ORIGEN,
     intervalo_analizador_horas,
     marcar_analizador_run_now,
+    max_copias_por_origen,
     set_ajuste,
 )
 from app.templating import templates
@@ -23,6 +25,7 @@ router = APIRouter(prefix="/ajustes")
 async def ver(request: Request, _: int = Depends(require_login)):
     with session_scope() as session:
         intervalo = intervalo_analizador_horas(session)
+        max_origen = max_copias_por_origen(session)
         ubicaciones = [
             {"id": u.id, "nombre": u.nombre, "en_uso": _en_uso(session, u.id)}
             for u in session.scalars(select(Ubicacion).order_by(Ubicacion.nombre))
@@ -30,8 +33,17 @@ async def ver(request: Request, _: int = Depends(require_login)):
     return templates.TemplateResponse(
         "ajustes.html",
         {"request": request, "active": "ajustes", "intervalo": intervalo,
+         "max_copias_por_origen": max_origen,
          "ubicaciones": ubicaciones, "aviso": request.query_params.get("aviso")},
     )
+
+
+@router.post("/cola")
+async def guardar_cola(max_copias_por_origen: int = Form(...), _: int = Depends(require_login)):
+    """Copias que pueden leer a la vez del mismo host de origen."""
+    with session_scope() as session:
+        set_ajuste(session, MAX_COPIAS_POR_ORIGEN, str(min(16, max(1, max_copias_por_origen))))
+    return RedirectResponse("/ajustes?aviso=cola-guardada", status_code=303)
 
 
 @router.post("/analizador")
