@@ -169,6 +169,13 @@ class Destino(Base):
     carpeta_base: Mapped[str] = mapped_column(String(512), nullable=False)
     proteccion: Mapped[str] = mapped_column(Enum(*PROTECCIONES), default="single")
     ubicacion_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ubicaciones.id"))
+    # Copias que pueden escribir a la vez en este destino. En discos mecánicos
+    # (y en RAID por hardware) varias escrituras simultáneas rinden mucho menos
+    # que encoladas, así que por defecto se copian de una en una.
+    max_copias: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    # Ruta del rsync que se ejecuta en el destino (--rsync-path). Vacío = el del
+    # PATH del destino. En macOS el del sistema es openrsync (protocolo 29).
+    rsync_remoto: Mapped[Optional[str]] = mapped_column(String(255))
     estado: Mapped[str] = mapped_column(Enum(*ESTADOS_CONEXION), default="desconocido")
     espacio_total: Mapped[Optional[int]] = mapped_column(BigInteger)     # bytes
     espacio_backups: Mapped[Optional[int]] = mapped_column(BigInteger)   # bytes

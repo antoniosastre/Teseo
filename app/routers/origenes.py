@@ -432,6 +432,6 @@ async def preview(
             ruta_origen=ruta_origen, carpeta_base=d.carpeta_base, host_nombre=host.nombre,
             volumen_nombre=o.volumen.nombre, origen_nombre=o.nombre, tipo=tipo,
             destino_usuario=d.usuario, destino_host=d.host, destino_puerto=d.puerto,
-            extra_flags=rsync_extra or None, filtros=filtros,
+            extra_flags=rsync_extra or None, filtros=filtros, rsync_remoto=d.rsync_remoto,
         )
     return JSONResponse({"command": cmd})

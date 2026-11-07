@@ -1,9 +1,11 @@
 """Analizador periódico de orígenes.
 
-Dos funciones, ejecutadas cada X horas (configurable en ajustes) o a demanda:
+Tres funciones, ejecutadas cada X horas (configurable en ajustes) o a demanda:
   1. Refresca el tamaño de cada origen (``du``) y lo registra en el histórico.
   2. Re-explora los hosts con su conector para detectar orígenes nuevos y
      desaparecidos; los desaparecidos con tareas quedan huérfanos y se avisa por email.
+  3. Mide lo que ocupan las copias en cada destino (``du``, lento en árboles con
+     millones de enlaces duros; por eso no lo hace el monitor de cada 5 minutos).
 
 Nunca borra orígenes ni tareas: los desaparecidos solo se marcan.
 """
@@ -19,6 +21,7 @@ from app.models import HistoricoTamano, HostOrigen, Origen
 from app.remote import SshError, connect, run
 from app.services import explorar_host, ssh_target_for_host
 from connectors import get_connector
+from daemon.monitor import medir_backups_destinos
 from daemon.notify import notify_orphan
 
 
@@ -99,6 +102,11 @@ def refrescar_tamanos(box: SecretBox) -> None:
 
 
 def run_analisis(box: SecretBox) -> None:
-    """Ejecuta el análisis completo: re-exploración + refresco de tamaños."""
+    """Ejecuta el análisis completo: re-exploración + refresco de tamaños.
+
+    Incluye lo que ocupan las copias en cada destino (``du``), que es lento y por
+    eso no lo hace el monitor de cada 5 minutos.
+    """
     reexplorar(box)
     refrescar_tamanos(box)
+    medir_backups_destinos(box)

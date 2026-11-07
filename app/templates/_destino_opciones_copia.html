@@ -1,0 +1,17 @@
+{# Opciones de copia de un destino. Espera `form` con max_copias y rsync_remoto. #}
+<fieldset>
+  <legend>Copias en este destino</legend>
+  <div class="grid2">
+    <label>Copias simultáneas
+      <input name="max_copias" type="number" min="1" max="16" value="{{ form.max_copias or 1 }}">
+      <small class="muted">En discos mecánicos o RAID de discos, deja 1: varias copias
+      escribiendo a la vez van mucho más despacio que de una en una. Las demás esperan turno.</small>
+    </label>
+    <label>Ruta de rsync en el destino
+      <input name="rsync_remoto" value="{{ form.rsync_remoto or '' }}" placeholder="/usr/local/bin/rsync">
+      <small class="muted">Vacío = el rsync por defecto del destino. En macOS ese es openrsync
+      (protocolo 29): con Homebrew indica <code>/usr/local/bin/rsync</code> (Intel) o
+      <code>/opt/homebrew/bin/rsync</code> (Apple Silicon).</small>
+    </label>
+  </div>
+</fieldset>

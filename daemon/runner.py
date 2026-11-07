@@ -161,6 +161,7 @@ def lanzar_tarea(tarea_id: int, box: SecretBox) -> None:
             "destino_usuario": destino.usuario,
             "destino_host": destino.host,
             "destino_puerto": destino.puerto,
+            "rsync_remoto": destino.rsync_remoto,
             "rsync_extra": tarea.rsync_extra,
             "comando_override": tarea.comando_rsync,
             "cron": tarea.cron,
@@ -187,6 +188,7 @@ def lanzar_tarea(tarea_id: int, box: SecretBox) -> None:
             destino_usuario=info["destino_usuario"], destino_host=info["destino_host"],
             destino_puerto=info["destino_puerto"], key_path=key_path,
             extra_flags=info["rsync_extra"], filtros=info["filtros"],
+            rsync_remoto=info["rsync_remoto"],
         )
         _prepare_destino(destino_target, plan.dest_root)
         command = info["comando_override"] or plan.command

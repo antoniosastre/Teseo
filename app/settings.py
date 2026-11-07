@@ -12,10 +12,13 @@ from app.models import Ajuste
 # Claves conocidas y sus valores por defecto.
 ANALIZADOR_INTERVALO_HORAS = "analizador_intervalo_horas"
 ANALIZADOR_RUN_NOW = "analizador_run_now"
+# Copias que pueden leer a la vez del mismo host de origen (cola por origen).
+MAX_COPIAS_POR_ORIGEN = "max_copias_por_origen"
 
 _DEFAULTS = {
     ANALIZADOR_INTERVALO_HORAS: "24",
     ANALIZADOR_RUN_NOW: "0",
+    MAX_COPIAS_POR_ORIGEN: "1",
 }
 
 
@@ -43,6 +46,10 @@ def get_int(session, clave: str, minimo: int = 1) -> int:
 
 def intervalo_analizador_horas(session) -> int:
     return get_int(session, ANALIZADOR_INTERVALO_HORAS, minimo=1)
+
+
+def max_copias_por_origen(session) -> int:
+    return get_int(session, MAX_COPIAS_POR_ORIGEN, minimo=1)
 
 
 def analizador_run_now(session) -> bool:

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Editar destino{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Editar destino: {{ destino.nombre }}</h1><a href="/destinos" class="btn secondary">Volver</a></div>
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+<form method="post" action="/destinos/{{ destino.id }}/editar" class="form-card">
+  <fieldset>
+    <legend>Conexión</legend>
+    <p class="muted small">
+      <code>{{ destino.usuario }}@{{ destino.host }}:{{ destino.puerto }}</code> ·
+      carpeta base <code>{{ destino.carpeta_base }}</code><br>
+      La conexión y la carpeta base no se cambian aquí: hacerlo rompería la estructura y
+      los históricos de las copias que ya existen.
+    </p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Protección</legend>
+    <div class="grid2">
+      <label>Nivel de protección del volumen
+        <select name="proteccion">
+          {% for p in protecciones %}
+          <option value="{{ p }}" {{ 'selected' if destino.proteccion==p }}>
+            {{ {'single':'Disco único','raid1':'RAID (1 disco)','raid2':'RAID (2 discos)'}[p] }}
+          </option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Ubicación física
+        <select name="ubicacion_id">
+          <option value="">— sin especificar —</option>
+          {% for u in ubicaciones %}
+          <option value="{{ u.id }}" {{ 'selected' if destino.ubicacion_id==u.id }}>{{ u.nombre }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+  </fieldset>
+
+  {% with form=destino %}{% include "_destino_opciones_copia.html" %}{% endwith %}
+
+  <button type="submit" class="primary">Guardar cambios</button>
+</form>
+{% endblock %}
